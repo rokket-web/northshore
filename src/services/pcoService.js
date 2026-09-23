@@ -89,12 +89,16 @@ async function updatePerson(personId, attributes) {
 // differently there. Field names aren't guaranteed unique across tabs in PCO, so lookups
 // below scope to this tab rather than matching on name alone.
 const TAB_NAME = 'Spiritual Gifts';
-const FIELD_NAMES = {
-  topGifts: 'Top 5 Spiritual Gifts',
-  topRoles: 'Top 5 Volunteer Matches',
+
+// One field per rank, so each gift/role gets its own row on the profile instead of one
+// comma-joined field. Index 0 = rank 1.
+const GIFT_RANK_FIELD_NAMES = ['Spiritual Gift #1', 'Spiritual Gift #2', 'Spiritual Gift #3', 'Spiritual Gift #4', 'Spiritual Gift #5'];
+const ROLE_RANK_FIELD_NAMES = ['Volunteer Job1', 'Volunteer Job2', 'Volunteer Job3', 'Volunteer Job4', 'Volunteer Job5'];
+
+const SINGLE_FIELD_NAMES = {
   dayJob: 'Day Job',
   volunteerExperience: 'Volunteer Experience',
-  pdfLink: 'PDF',
+  pdfLink: 'Full Assessment',
 };
 
 let tabIdPromise;
@@ -163,15 +167,30 @@ async function upsertFieldDatum(personId, fieldDefinitionId, value) {
 }
 
 /**
- * Writes each present value in `fields` to its matching PCO custom field, keyed by
- * FIELD_NAMES above (e.g. { topGifts: "Leadership, Teaching, ...", dayJob: "Electrician" }).
- * Keys with no value (undefined/null/empty string) are skipped rather than clearing
- * the field on PCO — a blank submission field shouldn't erase a previous answer.
+ * Writes each present value to its matching PCO custom field:
+ * - fields.topGifts / fields.topRoles: arrays, written one-per-rank into
+ *   GIFT_RANK_FIELD_NAMES / ROLE_RANK_FIELD_NAMES (index 0 → rank 1, etc.)
+ * - fields.dayJob / fields.volunteerExperience / fields.pdfLink: single values,
+ *   written into SINGLE_FIELD_NAMES
+ * Missing/empty values are skipped rather than clearing the field on PCO — e.g. a
+ * submission with only 3 ranked gifts doesn't erase gifts #4–5 from a prior submission.
  */
-async function updateProfileFields(personId, fields) {
-  for (const [key, value] of Object.entries(fields)) {
+async function updateProfileFields(personId, { topGifts = [], topRoles = [], ...singleValues }) {
+  for (let i = 0; i < GIFT_RANK_FIELD_NAMES.length; i++) {
+    if (!topGifts[i]) continue;
+    const fieldId = await findFieldDefinitionIdByName(GIFT_RANK_FIELD_NAMES[i]);
+    await upsertFieldDatum(personId, fieldId, topGifts[i]);
+  }
+
+  for (let i = 0; i < ROLE_RANK_FIELD_NAMES.length; i++) {
+    if (!topRoles[i]) continue;
+    const fieldId = await findFieldDefinitionIdByName(ROLE_RANK_FIELD_NAMES[i]);
+    await upsertFieldDatum(personId, fieldId, topRoles[i]);
+  }
+
+  for (const [key, value] of Object.entries(singleValues)) {
     if (value === undefined || value === null || value === '') continue;
-    const fieldName = FIELD_NAMES[key];
+    const fieldName = SINGLE_FIELD_NAMES[key];
     if (!fieldName) continue;
     const fieldId = await findFieldDefinitionIdByName(fieldName);
     await upsertFieldDatum(personId, fieldId, value);

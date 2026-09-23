@@ -110,20 +110,32 @@ This app writes to SharePoint via Microsoft Graph, authenticating as an app
    Gifts"** tab (create it via **Add tab** if it doesn't exist yet) — this is
    what makes the results show up together under their own tab on a person's
    profile, instead of scattered into whatever tab happens to be first. It
-   should contain five fields:
-   - **"Top 5 Spiritual Gifts"** — type **Text**
-   - **"Top 5 Volunteer Matches"** — type **Text**
-   - **"Day Job"** — type **Text**
-   - **"Volunteer Experience"** — type **Text Area** (can run long)
-   - **"PDF"** — type **Website** (renders as a clickable link on the profile
-     — PCO's People API has no general file/document storage on a profile,
-     so a link is the closest equivalent to "the PDF on their profile")
+   should contain 13 fields, one per row on the profile rather than one
+   combined field per category:
+   - **"Spiritual Gift #1"** through **"Spiritual Gift #5"**
+   - **"Volunteer Job1"** through **"Volunteer Job5"**
+   - **"Day Job"**
+   - **"Volunteer Experience"**
+   - **"Full Assessment"** — the PDF link (PCO's People API has no general
+     file/document storage on a profile, so a link is the closest equivalent
+     to "the PDF on their profile")
+
+   Field type (Text, Text Area, Dropdown, etc.) doesn't matter to the write —
+   the app always POSTs a plain value through the API, the same as typing
+   into a Text field. If a field is a Dropdown and the value doesn't match an
+   existing option yet, PCO's API automatically adds it as a new option — no
+   manual setup of every possible gift/role name needed, and no one ever has
+   to manually pick anything, since nothing here is a human filling out a
+   form. **"Volunteer Job1"**–**"Job5"** get just the team name (e.g. "Life
+   Group Leader") without the match percentage, to keep each field clean;
+   the match percentage is still in the PDF and the history Note.
 
    Both the tab name and field names must match exactly what's in
-   `src/services/pcoService.js` (`TAB_NAME` / `FIELD_NAMES`) — update the code
-   if you'd rather name them differently. If the tab isn't found, field
-   lookups fall back to matching by name only (a warning is logged), so it
-   still works if you skip the tab — you just lose the grouping.
+   `src/services/pcoService.js` (`TAB_NAME`, `GIFT_RANK_FIELD_NAMES`,
+   `ROLE_RANK_FIELD_NAMES`, `SINGLE_FIELD_NAMES`) — update the code if you'd
+   rather name them differently. If the tab isn't found, field lookups fall
+   back to matching by name only (a warning is logged), so it still works if
+   you skip the tab — you just lose the grouping.
 3. Optionally, in **Organization Settings → Note Categories**, create a
    **"Spiritual Gifts Assessment"** category so the history notes (added each
    time someone takes/retakes the quiz) are grouped and filterable on a
@@ -155,8 +167,9 @@ updating after deploy — it works as soon as the service is live.
 - **PDF content / filename**: `src/services/pdfService.js` and
   `buildFilename()` in `src/routes/webhook.js` — adjust formatting or the
   `Name_Spiritual_Gifts_YYYY-MM-DD.pdf` naming convention as needed.
-- **PCO fields written**: top 5 gifts, top 5 volunteer role matches, day job/
-  professional skill, previous volunteer experience, and the PDF link — see
-  `FIELD_NAMES` in `pcoService.js`. DISC/MBTI type is in the payload and PDF
-  but not currently written to a PCO field; add an entry to `FIELD_NAMES` and
-  the `updateProfileFields()` call in `webhook.js` to add it.
+- **PCO fields written**: 5 ranked gift fields, 5 ranked volunteer match
+  fields, day job, volunteer experience, and the PDF link — see
+  `GIFT_RANK_FIELD_NAMES` / `ROLE_RANK_FIELD_NAMES` / `SINGLE_FIELD_NAMES` in
+  `pcoService.js`. DISC/MBTI type is in the payload and PDF but not currently
+  written to a PCO field; add it to `SINGLE_FIELD_NAMES` and the
+  `updateProfileFields()` call in `webhook.js` to add it.

@@ -35,8 +35,17 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
   try {
     const pdfBuffer = await renderSurveyPdf(submission);
     const filename = buildFilename(submission);
-    const driveItem = await uploadSurveyPdf(filename, pdfBuffer);
-    const pdfLink = await createSharingLink(driveItem.id);
+
+    // SharePoint isn't required for the PCO side to work, and a temporary Azure/SharePoint
+    // problem shouldn't block updating PCO — so this failing is a warning, not fatal. The
+    // "Full Assessment" field/note line is just skipped (falsy pdfLink) until it succeeds.
+    let pdfLink = null;
+    try {
+      const driveItem = await uploadSurveyPdf(filename, pdfBuffer);
+      pdfLink = await createSharingLink(driveItem.id);
+    } catch (err) {
+      console.warn('[webhook] SharePoint upload failed — continuing without a PDF link:', err.message);
+    }
 
     const match = await findMatchingPerson(submission.email, submission.name);
 
@@ -53,20 +62,20 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
     const person = match.person;
 
     const topGifts = Array.isArray(submission.topGifts) ? submission.topGifts.slice(0, 5) : [];
-    const topRoles = Array.isArray(submission.topRoles)
-      ? submission.topRoles.slice(0, 5).map((r) => `${r.team} (${r.score}%)`).join(', ')
-      : '';
+    const topRoles = Array.isArray(submission.topRoles) ? submission.topRoles.slice(0, 5) : [];
+    const topRoleNames = topRoles.map((r) => r.team);
+    const topRolesSummary = topRoles.map((r) => `${r.team} (${r.score}%)`).join(', ');
 
     await updateProfileFields(person.id, {
-      topGifts: topGifts.join(', '),
-      topRoles,
+      topGifts,
+      topRoles: topRoleNames,
       dayJob: submission.dayJobSkill,
       volunteerExperience: submission.volunteerExperience,
       pdfLink,
     });
     await addAssessmentNote(person.id, {
       topGifts,
-      topRoles,
+      topRoles: topRolesSummary,
       dayJob: submission.dayJobSkill,
       volunteerExperience: submission.volunteerExperience,
       pdfLink,
