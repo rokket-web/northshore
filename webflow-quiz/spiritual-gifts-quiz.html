@@ -272,9 +272,11 @@ const S = {
 
 const CHURCH_STAFF_EMAIL = "info@northshorechurch.org"; // TODO: replace with real staff/pastor inbox
 
-// TODO: replace with the deployed Render app URL once it exists, e.g.
+// Relative because this page is served directly by the backend at /quiz (same origin).
+// If this raw code ever gets pasted directly into a Webflow page's own DOM instead
+// (different origin from the backend), switch this to the full Render URL, e.g.
 // "https://northshore-survey-connector.onrender.com/webhook/survey"
-const SURVEY_BACKEND_URL = "https://YOUR-RENDER-APP.onrender.com/webhook/survey";
+const SURVEY_BACKEND_URL = "/webhook/survey";
 
 // Not a real secret (this file ships to the browser, so anyone can read it) — just a
 // lightweight filter so the backend can ignore stray/garbage POSTs. Set the same value

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Northshore</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --ink:#231F20; --paper:#F7F7F7; --gold:#D78A5C; }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    background:var(--paper);
+    font-family:'Montserrat',system-ui,-apple-system,sans-serif;
+  }
+  h1{
+    margin:0;
+    font-size:clamp(2.5rem, 8vw, 5rem);
+    font-weight:700;
+    letter-spacing:.08em;
+    color:var(--ink);
+    text-align:center;
+  }
+  h1::after{
+    content:'';
+    display:block;
+    width:64px;
+    height:4px;
+    background:var(--gold);
+    margin:18px auto 0;
+    border-radius:2px;
+  }
+</style>
+</head>
+<body>
+<h1>NORTHSHORE</h1>
+</body>
+</html>
