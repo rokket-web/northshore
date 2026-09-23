@@ -2,7 +2,8 @@ const express = require('express');
 const config = require('../config');
 const { renderSurveyPdf } = require('../services/pdfService');
 const { uploadSurveyPdf, createSharingLink } = require('../services/sharepointService');
-const { findPersonByEmail, setTopGifts, setPdfLink } = require('../services/pcoService');
+const { findMatchingPerson, updateProfileFields, addAssessmentNote } = require('../services/pcoService');
+const { sendUnmatchedAlert } = require('../services/mailService');
 
 const router = express.Router();
 
@@ -35,19 +36,42 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
     const pdfBuffer = await renderSurveyPdf(submission);
     const filename = buildFilename(submission);
     const driveItem = await uploadSurveyPdf(filename, pdfBuffer);
-
-    const person = await findPersonByEmail(submission.email);
-    if (!person) {
-      console.warn(`[webhook] No PCO person found for ${submission.email}; PDF saved, profile not updated.`);
-      return res.status(202).json({ status: 'pdf_saved_no_pco_match', filename });
-    }
-
-    if (Array.isArray(submission.topGifts) && submission.topGifts.length > 0) {
-      await setTopGifts(person.id, submission.topGifts.slice(0, 3));
-    }
-
     const pdfLink = await createSharingLink(driveItem.id);
-    await setPdfLink(person.id, pdfLink);
+
+    const match = await findMatchingPerson(submission.email, submission.name);
+
+    if (match.status !== 'matched') {
+      const reason =
+        match.status === 'none'
+          ? 'No PCO person found with this email address.'
+          : `Email matched ${match.candidates.length} different people, and the submitted name didn't narrow it to one.`;
+      console.warn(`[webhook] ${reason} (${submission.email})`);
+      await sendUnmatchedAlert(submission, reason, match.candidates);
+      return res.status(202).json({ status: `pdf_saved_${match.status}_match`, filename, pdfLink });
+    }
+
+    const person = match.person;
+
+    const topGifts = Array.isArray(submission.topGifts) ? submission.topGifts.slice(0, 5) : [];
+    const topRoles = Array.isArray(submission.topRoles)
+      ? submission.topRoles.slice(0, 5).map((r) => `${r.team} (${r.score}%)`).join(', ')
+      : '';
+
+    await updateProfileFields(person.id, {
+      topGifts: topGifts.join(', '),
+      topRoles,
+      dayJob: submission.dayJobSkill,
+      volunteerExperience: submission.volunteerExperience,
+      pdfLink,
+    });
+    await addAssessmentNote(person.id, {
+      topGifts,
+      topRoles,
+      dayJob: submission.dayJobSkill,
+      volunteerExperience: submission.volunteerExperience,
+      pdfLink,
+      submittedAt: submission.submittedAt,
+    });
 
     return res.status(200).json({ status: 'ok', filename, pcoPersonId: person.id, pdfLink });
   } catch (err) {

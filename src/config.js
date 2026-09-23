@@ -30,4 +30,9 @@ module.exports = {
     appId: required('PCO_APP_ID'),
     secret: required('PCO_SECRET'),
   },
+
+  mail: {
+    senderUpn: process.env.MAIL_SENDER_UPN || '',
+    staffAlertEmail: process.env.STAFF_ALERT_EMAIL || '',
+  },
 };

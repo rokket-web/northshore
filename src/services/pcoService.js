@@ -26,30 +26,44 @@ async function pcoRequest(path, options = {}) {
 }
 
 /**
- * Finds a single PCO person by email address.
- * Returns null if no match, throws if more than one match (ambiguous).
+ * Finds the single PCO person matching a submission's email address, disambiguating
+ * by name when the email is shared across multiple people (common for spouses or
+ * parent/child records that share one household inbox in PCO).
+ *
+ * Never guesses when it isn't sure — returns a status instead of picking a "closest"
+ * match, so the caller can route anything uncertain to a human rather than silently
+ * attributing a result to the wrong person.
+ *
+ * @returns {Promise<{status: 'matched', person: object} | {status: 'none'|'ambiguous', candidates: object[]}>}
  */
-async function findPersonByEmail(email) {
-  const query = new URLSearchParams({
-    where: '', // placeholder, PCO uses bracket-style params below
-  });
-  query.delete('where');
-  query.set('where[search_name_or_email_or_phone_number]', email);
+async function findMatchingPerson(email, name) {
+  const normalizedEmail = (email || '').trim().toLowerCase();
+  if (!normalizedEmail) return { status: 'none', candidates: [] };
+
+  const query = new URLSearchParams();
+  query.set('where[search_name_or_email_or_phone_number]', normalizedEmail);
   query.set('include', 'emails');
 
   const result = await pcoRequest(`/people?${query.toString()}`);
 
-  const matches = (result.data || []).filter((person) =>
+  const candidates = (result.data || []).filter((person) =>
     (result.included || [])
       .filter((inc) => inc.type === 'Email' && inc.relationships?.person?.data?.id === person.id)
-      .some((inc) => inc.attributes.address.toLowerCase() === email.toLowerCase())
+      .some((inc) => (inc.attributes.address || '').trim().toLowerCase() === normalizedEmail)
   );
 
-  if (matches.length === 0) return null;
-  if (matches.length > 1) {
-    throw new Error(`Ambiguous PCO match: ${matches.length} people found for email ${email}`);
+  if (candidates.length === 0) return { status: 'none', candidates: [] };
+  if (candidates.length === 1) return { status: 'matched', person: candidates[0] };
+
+  const normalizedName = (name || '').trim().toLowerCase();
+  if (normalizedName) {
+    const nameMatches = candidates.filter(
+      (p) => (p.attributes?.name || '').trim().toLowerCase() === normalizedName
+    );
+    if (nameMatches.length === 1) return { status: 'matched', person: nameMatches[0] };
   }
-  return matches[0];
+
+  return { status: 'ambiguous', candidates };
 }
 
 /**
@@ -73,9 +87,14 @@ async function updatePerson(personId, attributes) {
 const fieldDefinitionCache = new Map();
 
 // These must already exist in PCO under People → Organization Settings → Custom Fields
-// (create once, by hand — see README). Rename here if you name them differently there.
-const TOP_GIFTS_FIELD_NAME = 'Top Spiritual Gifts';
-const PDF_LINK_FIELD_NAME = 'Spiritual Gifts Assessment PDF';
+// (create once, by hand — see README). Rename values here if you name them differently there.
+const FIELD_NAMES = {
+  topGifts: 'Top Spiritual Gifts',
+  topRoles: 'Top Volunteer Matches',
+  dayJob: 'Day Job / Professional Skill',
+  volunteerExperience: 'Previous Volunteer Experience',
+  pdfLink: 'Spiritual Gifts Assessment PDF',
+};
 
 async function findFieldDefinitionIdByName(name) {
   if (fieldDefinitionCache.has(name)) return fieldDefinitionCache.get(name);
@@ -123,14 +142,67 @@ async function upsertFieldDatum(personId, fieldDefinitionId, value) {
   });
 }
 
-async function setTopGifts(personId, topGifts) {
-  const fieldId = await findFieldDefinitionIdByName(TOP_GIFTS_FIELD_NAME);
-  return upsertFieldDatum(personId, fieldId, topGifts.join(', '));
+/**
+ * Writes each present value in `fields` to its matching PCO custom field, keyed by
+ * FIELD_NAMES above (e.g. { topGifts: "Leadership, Teaching, ...", dayJob: "Electrician" }).
+ * Keys with no value (undefined/null/empty string) are skipped rather than clearing
+ * the field on PCO — a blank submission field shouldn't erase a previous answer.
+ */
+async function updateProfileFields(personId, fields) {
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined || value === null || value === '') continue;
+    const fieldName = FIELD_NAMES[key];
+    if (!fieldName) continue;
+    const fieldId = await findFieldDefinitionIdByName(fieldName);
+    await upsertFieldDatum(personId, fieldId, value);
+  }
 }
 
-async function setPdfLink(personId, url) {
-  const fieldId = await findFieldDefinitionIdByName(PDF_LINK_FIELD_NAME);
-  return upsertFieldDatum(personId, fieldId, url);
+const noteCategoryCache = new Map();
+
+// Create this once in PCO under People → Organization Settings → Note Categories.
+// Optional — if it doesn't exist, notes are still created, just uncategorized.
+const NOTE_CATEGORY_NAME = 'Spiritual Gifts Assessment';
+
+async function findNoteCategoryIdByName(name) {
+  if (noteCategoryCache.has(name)) return noteCategoryCache.get(name);
+
+  const query = new URLSearchParams({ 'where[name]': name });
+  const result = await pcoRequest(`/note_categories?${query.toString()}`);
+  const id = result.data?.[0]?.id || null;
+  noteCategoryCache.set(name, id);
+  return id;
 }
 
-module.exports = { findPersonByEmail, updatePerson, setTopGifts, setPdfLink };
+/**
+ * Adds a dated Note to the person with this submission's results, instead of
+ * overwriting a field — so retaking the quiz builds a history on the profile
+ * rather than erasing the previous result.
+ */
+async function addAssessmentNote(personId, { topGifts, topRoles, dayJob, volunteerExperience, pdfLink, submittedAt }) {
+  const date = (submittedAt || new Date().toISOString()).slice(0, 10);
+  const lines = [`Spiritual Gifts Assessment — ${date}`];
+  if (topGifts?.length) lines.push(`Top gifts: ${topGifts.join(', ')}`);
+  if (topRoles) lines.push(`Top volunteer matches: ${topRoles}`);
+  if (dayJob) lines.push(`Day job / professional skill: ${dayJob}`);
+  if (volunteerExperience) lines.push(`Previous volunteer experience: ${volunteerExperience}`);
+  if (pdfLink) lines.push(`Full results PDF: ${pdfLink}`);
+
+  const categoryId = await findNoteCategoryIdByName(NOTE_CATEGORY_NAME);
+  const relationships = categoryId
+    ? { note_category: { data: { type: 'NoteCategory', id: categoryId } } }
+    : undefined;
+
+  return pcoRequest(`/people/${personId}/notes`, {
+    method: 'POST',
+    body: JSON.stringify({
+      data: {
+        type: 'Note',
+        attributes: { note: lines.join('\n') },
+        ...(relationships ? { relationships } : {}),
+      },
+    }),
+  });
+}
+
+module.exports = { findMatchingPerson, updatePerson, updateProfileFields, addAssessmentNote };

@@ -1,20 +1,47 @@
 # northshore-survey-connector
 
-Backend for the Spiritual Gifts & Volunteer Match quiz. The quiz itself
-([webflow-quiz/spiritual-gifts-quiz.html](webflow-quiz/spiritual-gifts-quiz.html)) runs
-entirely in the visitor's browser on Webflow; when they reach the results screen it POSTs
-its results directly to this app, which renders a PDF, saves it to SharePoint, and updates
-the matching Planning Center Online (PCO) person profile.
+Backend for the Spiritual Gifts & Volunteer Match quiz. `GET /` is a simple "NORTHSHORE"
+landing page and `GET /quiz` serves the quiz itself
+([webflow-quiz/spiritual-gifts-quiz.html](webflow-quiz/spiritual-gifts-quiz.html)) — it runs
+entirely in the visitor's browser; when they reach the results screen it POSTs its results
+directly to this app, which renders a PDF, saves it to SharePoint, and updates the matching
+Planning Center Online (PCO) person profile.
 
 ## Flow
 
-1. Visitor completes the quiz on Webflow. On reaching (or updating) the results screen,
+1. Visitor completes the quiz at `/quiz`. On reaching (or updating) the results screen,
    the page POSTs a JSON summary to `POST /webhook/survey` (see `buildSurveyPayload()` in
    the quiz file for the exact shape).
 2. The submission is rendered into a PDF (`src/services/pdfService.js`).
-3. The PDF is uploaded to SharePoint via Microsoft Graph (`src/services/sharepointService.js`).
-4. The submitter is matched to a PCO person by email, and their profile is updated with
-   their top 3 gifts and a link to the PDF (`src/services/pcoService.js`).
+3. The PDF is uploaded to SharePoint via Microsoft Graph, and a sharing link is created
+   (`src/services/sharepointService.js`).
+4. The submitter is matched to **exactly one** PCO person by email — see "Matching
+   accuracy" below (`src/services/pcoService.js`). If matched: their top 3 gifts and the
+   PDF link are written to two custom fields (always reflecting the latest submission),
+   and a dated Note is added so retaking the quiz builds a history instead of erasing the
+   previous result. If not matched confidently, nothing on PCO is touched and staff get an
+   email instead (`src/services/mailService.js`) — the PDF is still saved either way.
+
+## Matching accuracy
+
+Getting this wrong means attributing results to the wrong person, silently overwriting
+data, or creating duplicate PCO people — so the matching logic is deliberately
+conservative: it never guesses, and it never creates a new PCO person.
+
+- **Primary signal**: exact email match against PCO's People search.
+- **Disambiguation**: if multiple PCO people share that email (common for spouses or
+  parent/child records sharing one household inbox), it narrows using the name typed
+  into the quiz. Only proceeds if that narrows it to exactly one person.
+- **No match, or still ambiguous after that**: the submission is *not* applied to PCO.
+  Instead, `STAFF_ALERT_EMAIL` gets an email with what was submitted and (if ambiguous)
+  which PCO people it could be, so a human decides. The PDF is still saved to SharePoint
+  either way, so nothing is lost.
+- **No auto-created people, ever**: if nobody matches, the app does not create a new PCO
+  person. Auto-creating profiles from a web form is how ChMS databases end up full of
+  near-duplicate people (typos, nicknames, etc.) — a human should decide to add someone.
+- **No duplicate field data**: the custom-field writes upsert (check for an existing
+  value for that person+field before creating a new one) rather than blindly POSTing,
+  so retaking the quiz never creates duplicate field entries.
 
 ## Setup
 
@@ -27,18 +54,15 @@ npm run dev
 ### 1. The quiz file
 
 [webflow-quiz/spiritual-gifts-quiz.html](webflow-quiz/spiritual-gifts-quiz.html) is a
-self-contained HTML/CSS/JS page — no build step. Before publishing it to Webflow:
+self-contained HTML/CSS/JS page — no build step. It's served directly by this app at
+`/quiz`, so `SURVEY_BACKEND_URL` is a relative `/webhook/survey` and needs no editing for
+that use. If you instead paste the raw code into a Webflow page's own DOM (different
+origin from this app), switch that constant to the full Render URL — see the comment
+next to it in the file.
 
-- Set `SURVEY_BACKEND_URL` (near the top of the `<script>` block) to your deployed Render
-  URL, e.g. `https://northshore-survey-connector.onrender.com/webhook/survey`.
-- Optionally set `SURVEY_WEBHOOK_TOKEN` to match `WEBFLOW_WEBHOOK_SECRET` below — this is
-  **not** a real secret (it ships to the browser and anyone can read it in page source),
-  it just filters out stray/garbage POSTs.
-- In Webflow, paste the page into an **Embed** element (or the page's custom code area).
-  Because it renders everything into `<div id="app">` and builds its own `<head>` content
-  via the `<link>`/`<style>` tags at the top, the simplest approach is usually a dedicated
-  Webflow page with this as the full custom code, rather than embedding it inside an
-  existing designed layout.
+Optionally set `SURVEY_WEBHOOK_TOKEN` to match `WEBFLOW_WEBHOOK_SECRET` below — this is
+**not** a real secret (it ships to the browser and anyone can read it in page source), it
+just filters out stray/garbage POSTs.
 
 The submission fires automatically (debounced ~800ms) once a visitor has entered their
 email and reached the results screen, and again whenever they edit the optional fields
@@ -61,12 +85,18 @@ This app writes to SharePoint via Microsoft Graph, authenticating as an app
    **value** immediately (it's hidden after you navigate away) → this becomes
    `AZURE_CLIENT_SECRET`.
 4. Go to **API permissions → Add a permission → Microsoft Graph → Application
-   permissions**, and add `Sites.ReadWrite.All` (or a narrower
-   `Sites.Selected` scope if you want to restrict it to one site — see
-   [Graph's Sites.Selected docs](https://learn.microsoft.com/en-us/graph/permissions-reference#sitesselected)
-   for the extra per-site grant step that requires). This also covers creating
-   the sharing link used for the PCO PDF link.
-5. Click **Grant admin consent** for the permission (requires a tenant admin).
+   permissions**, and add:
+   - `Sites.ReadWrite.All` (or narrower `Sites.Selected` — see
+     [Graph's Sites.Selected docs](https://learn.microsoft.com/en-us/graph/permissions-reference#sitesselected)
+     for the extra per-site grant step that requires). Covers the PDF upload
+     and the sharing link used for the PCO PDF link.
+   - `Mail.Send` — used to email staff when a submission can't be confidently
+     matched to a PCO person (see "Matching accuracy" above). **Important**:
+     by default this permission lets the app send as *any* mailbox in the
+     tenant. Scope it down with an
+     [Exchange Application Access Policy](https://learn.microsoft.com/en-us/graph/auth-limit-mailbox-access)
+     restricting it to just the mailbox you'll use as `MAIL_SENDER_UPN`.
+5. Click **Grant admin consent** for both permissions (requires a tenant admin).
 6. Find your target site's Graph site ID: `GET
    https://graph.microsoft.com/v1.0/sites/{hostname}:/sites/{site-path}` — the
    `id` field in the response is `SHAREPOINT_SITE_ID`.
@@ -76,23 +106,40 @@ This app writes to SharePoint via Microsoft Graph, authenticating as an app
 1. Generate a Personal Access Token at
    https://api.planningcenteronline.com/oauth/applications → App ID and
    Secret become `PCO_APP_ID` / `PCO_SECRET` (sent as HTTP Basic auth).
-2. In PCO People → **Organization Settings → Custom Fields**, create two
+2. In PCO People → **Organization Settings → Custom Fields**, create five
    fields (any tab/category works):
    - **"Top Spiritual Gifts"** — type **Text**
+   - **"Top Volunteer Matches"** — type **Text**
+   - **"Day Job / Professional Skill"** — type **Text**
+   - **"Previous Volunteer Experience"** — type **Text Area** (can run long)
    - **"Spiritual Gifts Assessment PDF"** — type **Website** (renders as a
-     clickable link on the profile)
+     clickable link on the profile — PCO's People API has no general file/
+     document storage on a profile, so a link is the closest equivalent to
+     "the PDF on their profile")
 
    The names must match exactly what's in `src/services/pcoService.js`
-   (`TOP_GIFTS_FIELD_NAME` / `PDF_LINK_FIELD_NAME`) — update one side if you'd
-   rather name them differently.
+   (`FIELD_NAMES`) — update one side if you'd rather name them differently.
+3. Optionally, in **Organization Settings → Note Categories**, create a
+   **"Spiritual Gifts Assessment"** category so the history notes (added each
+   time someone takes/retakes the quiz) are grouped and filterable on a
+   profile. Not required — notes are still added without it, just
+   uncategorized.
 
 ### 4. Deploy to Render
 
-`render.yaml` is set up as a blueprint — in Render, **New → Blueprint**,
-point it at this repo, and fill in the env vars flagged `sync: false` in the
-dashboard (secrets aren't stored in the repo). Once deployed, go back into
-the quiz file and set `SURVEY_BACKEND_URL` to the real URL, then republish it
-to Webflow.
+Create a **Web Service** (not Blueprint — Render's Blueprint flow picked up
+`plan: starter` in `render.yaml`, which requires billing info; a plain Web
+Service lets you pick the Free plan instead):
+
+1. **New +** → **Web Service** → connect this repo, branch `main`.
+2. Confirm **Runtime: Node** (auto-detected from `package.json`).
+3. Build Command: `npm install`. Start Command: `npm start`.
+4. Add the env vars from `.env.example` under **Environment** (paste the
+   whole block via "Add from .env" instead of one at a time).
+5. Deploy.
+
+The quiz at `/quiz` posts to a relative `/webhook/survey`, so no URL needs
+updating after deploy — it works as soon as the service is live.
 
 ## Notes
 
@@ -103,7 +150,8 @@ to Webflow.
 - **PDF content / filename**: `src/services/pdfService.js` and
   `buildFilename()` in `src/routes/webhook.js` — adjust formatting or the
   `Name_Spiritual_Gifts_YYYY-MM-DD.pdf` naming convention as needed.
-- **PCO fields written**: currently just top 3 gifts + PDF link. DISC/MBTI
-  and top role matches are already included in the payload and the PDF if
-  you want to add more fields later (`setTopGifts`/`setPdfLink` in
-  `pcoService.js` are the pattern to copy).
+- **PCO fields written**: top 5 gifts, top 5 volunteer role matches, day job/
+  professional skill, previous volunteer experience, and the PDF link — see
+  `FIELD_NAMES` in `pcoService.js`. DISC/MBTI type is in the payload and PDF
+  but not currently written to a PCO field; add an entry to `FIELD_NAMES` and
+  the `updateProfileFields()` call in `webhook.js` to add it.
