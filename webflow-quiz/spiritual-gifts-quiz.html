@@ -314,8 +314,8 @@ function progressPct(){
 
 function go(delta){
   S.step = Math.max(0, Math.min(TOTAL_STEPS-1, S.step + delta));
-  window.scrollTo({top:0, behavior:'smooth'});
   render();
+  window.scrollTo({top:0, behavior:'smooth'});
 }
 
 /* ===================== SCORING ===================== */
@@ -887,6 +887,7 @@ function renderResults(){
     S.under18 = null; S.pastorRequest = false; S.pastorNote = "";
     S.dayJobSkill = ""; S.volunteerExperience = "";
     render();
+    window.scrollTo({top:0, behavior:'smooth'});
   });
 
   document.getElementById('completeProfileBtn').addEventListener('click', async (e) => {
