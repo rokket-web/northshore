@@ -270,8 +270,6 @@ const S = {
   volunteerExperience: "",
 };
 
-const CHURCH_STAFF_EMAIL = "info@northshorechurch.org"; // TODO: replace with real staff/pastor inbox
-
 // Relative because this page is served directly by the backend at /quiz (same origin).
 // If this raw code ever gets pasted directly into a Webflow page's own DOM instead
 // (different origin from the backend), switch this to the full Render URL, e.g.
@@ -764,39 +762,6 @@ async function submitToBackend(){
   }
 }
 
-function buildResultsMailto(topGiftsList, disc, mtype, matches){
-  const subject = S.pastorRequest
-    ? `Follow-up request: ${S.name || 'A volunteer'} (Spiritual Gifts Assessment)`
-    : `Spiritual Gifts Assessment results: ${S.name || 'A volunteer'}`;
-  const topRoles = matches.slice(0, 5).map(m => `${m.role.team} (${Math.round(m.score*100)}%)`);
-  const bodyLines = [
-    `Name: ${S.name || '(not given)'}`,
-    `Email: ${S.email || '(not given)'}`,
-    ``,
-    `Top gifts: ${topGiftsList.join(', ')}`,
-    `Personality snapshot: ${disc.letter}-style, ${mtype}`,
-    ``,
-    `Top role matches:`,
-    ...topRoles.map(r => `- ${r}`),
-  ];
-  if (S.dayJobSkill) {
-    bodyLines.push(``, `Day job / professional skill they'd like to share: ${S.dayJobSkill}`);
-  }
-  if (S.volunteerExperience) {
-    bodyLines.push(``, `Previous volunteer experience: ${S.volunteerExperience}`);
-  }
-  if (S.pastorRequest) {
-    bodyLines.push(
-      ``,
-      `They checked the box asking to talk through something surprising they discovered during the assessment.`,
-      `Note from them:`,
-      S.pastorNote || '(no additional note provided)'
-    );
-  }
-  const body = bodyLines.join('\n');
-  return `mailto:${CHURCH_STAFF_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
-
 function renderResults(){
   const {norm} = computeGiftScores();
   const top5 = topGifts(norm, 5);
@@ -873,8 +838,7 @@ function renderResults(){
   </div>
 
   <div class="card">
-    <h3>Send your results to our team?</h3>
-    <p class="small">This opens your email app with your results pre-filled, addressed to our volunteer team &mdash; nothing is sent unless you choose to send that email yourself.</p>
+    <h3>Your details</h3>
     <input type="text" id="nameInput2" placeholder="Your name" value="${S.name}">
     <input type="email" id="emailInput2" placeholder="Your email" value="${S.email}">
     <div class="pair-opt ${S.pastorRequest ? 'sel' : ''}" id="pastorCheck" style="margin-bottom:${S.pastorRequest ? '10px' : '4px'}">
@@ -883,8 +847,8 @@ function renderResults(){
     </div>
     ${S.pastorRequest ? `
       <textarea id="pastorNote" placeholder="Optional — anything you'd like the pastor to know before you talk" style="width:100%;min-height:80px;padding:11px 13px;border:1px solid var(--line);border-radius:10px;font-family:var(--font-body);font-size:14.5px;background:#FDFCFA;margin-bottom:10px;resize:vertical">${S.pastorNote}</textarea>
+      <p class="hint" style="margin-top:-6px">Checking this sends a note straight to our team when you complete your profile below.</p>
     ` : ''}
-    <a id="sendBtn" href="${buildResultsMailto(topGifts(computeGiftScores().norm, 5), disc, mtype, matches)}" class="btn-primary" style="display:inline-block;text-decoration:none">Email my results to our team &rarr;</a>
   </div>
 
   <div class="card" id="completeCard">
@@ -900,10 +864,10 @@ function renderResults(){
   </div>
   `;
 
-  document.getElementById('dayJobInput').addEventListener('input', e => { S.dayJobSkill = e.target.value; refreshMailtoLink(matches, norm, mtype, disc); });
-  document.getElementById('volExpInput').addEventListener('input', e => { S.volunteerExperience = e.target.value; refreshMailtoLink(matches, norm, mtype, disc); });
-  document.getElementById('nameInput2').addEventListener('input', e => { S.name = e.target.value; refreshMailtoLink(matches, norm, mtype, disc); });
-  document.getElementById('emailInput2').addEventListener('input', e => { S.email = e.target.value; refreshMailtoLink(matches, norm, mtype, disc); });
+  document.getElementById('dayJobInput').addEventListener('input', e => { S.dayJobSkill = e.target.value; });
+  document.getElementById('volExpInput').addEventListener('input', e => { S.volunteerExperience = e.target.value; });
+  document.getElementById('nameInput2').addEventListener('input', e => { S.name = e.target.value; });
+  document.getElementById('emailInput2').addEventListener('input', e => { S.email = e.target.value; });
   document.getElementById('pastorCheckbox').addEventListener('change', e => {
     S.pastorRequest = e.target.checked;
     renderResults();
@@ -915,7 +879,7 @@ function renderResults(){
     cb.dispatchEvent(new Event('change'));
   });
   const pastorNoteEl = document.getElementById('pastorNote');
-  if (pastorNoteEl) pastorNoteEl.addEventListener('input', e => { S.pastorNote = e.target.value; refreshMailtoLink(matches, norm, mtype, disc); });
+  if (pastorNoteEl) pastorNoteEl.addEventListener('input', e => { S.pastorNote = e.target.value; });
   document.getElementById('backBtn').addEventListener('click', () => go(-1));
   document.getElementById('restartBtn').addEventListener('click', () => {
     S.step = 0; S.answers = {}; S.disc = {}; S.mbti = {};
@@ -947,10 +911,6 @@ function renderResults(){
   });
 }
 
-function refreshMailtoLink(matches, norm, mtype, disc){
-  const btn = document.getElementById('sendBtn');
-  if (btn) btn.href = buildResultsMailto(topGifts(norm, 5), disc, mtype, matches);
-}
 
 /* ===================== MAIN RENDER DISPATCH ===================== */
 function render(){

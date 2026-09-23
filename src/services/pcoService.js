@@ -123,7 +123,7 @@ const TAB_NAME = 'Spiritual Gifts';
 
 // One field per rank, so each gift/role gets its own row on the profile instead of one
 // comma-joined field. Index 0 = rank 1.
-const GIFT_RANK_FIELD_NAMES = ['Spiritual Gift #1', 'Spiritual Gift #2', 'Spiritual Gift #3', 'Spiritual Gift #4', 'Spiritual Gift #5'];
+const GIFT_RANK_FIELD_NAMES = ['Spiritual Gift1', 'Spiritual Gift2', 'Spiritual Gift3', 'Spiritual Gift4', 'Spiritual Gift5'];
 const ROLE_RANK_FIELD_NAMES = ['Volunteer Job1', 'Volunteer Job2', 'Volunteer Job3', 'Volunteer Job4', 'Volunteer Job5'];
 
 const SINGLE_FIELD_NAMES = {
@@ -205,27 +205,41 @@ async function upsertFieldDatum(personId, fieldDefinitionId, value) {
  *   written into SINGLE_FIELD_NAMES
  * Missing/empty values are skipped rather than clearing the field on PCO — e.g. a
  * submission with only 3 ranked gifts doesn't erase gifts #4–5 from a prior submission.
+ *
+ * @returns {Promise<string[]>} names of fields that don't exist in PCO under TAB_NAME
+ * and were therefore skipped — surfaced by the caller (e.g. on /recent) instead of
+ * only in server logs, since a name mismatch here fails silently otherwise.
  */
 async function updateProfileFields(personId, { topGifts = [], topRoles = [], ...singleValues }) {
+  const missingFields = [];
+
+  async function writeField(fieldName, value) {
+    const fieldId = await findFieldDefinitionIdByName(fieldName);
+    if (!fieldId) {
+      missingFields.push(fieldName);
+      return;
+    }
+    await upsertFieldDatum(personId, fieldId, value);
+  }
+
   for (let i = 0; i < GIFT_RANK_FIELD_NAMES.length; i++) {
     if (!topGifts[i]) continue;
-    const fieldId = await findFieldDefinitionIdByName(GIFT_RANK_FIELD_NAMES[i]);
-    await upsertFieldDatum(personId, fieldId, topGifts[i]);
+    await writeField(GIFT_RANK_FIELD_NAMES[i], topGifts[i]);
   }
 
   for (let i = 0; i < ROLE_RANK_FIELD_NAMES.length; i++) {
     if (!topRoles[i]) continue;
-    const fieldId = await findFieldDefinitionIdByName(ROLE_RANK_FIELD_NAMES[i]);
-    await upsertFieldDatum(personId, fieldId, topRoles[i]);
+    await writeField(ROLE_RANK_FIELD_NAMES[i], topRoles[i]);
   }
 
   for (const [key, value] of Object.entries(singleValues)) {
     if (value === undefined || value === null || value === '') continue;
     const fieldName = SINGLE_FIELD_NAMES[key];
     if (!fieldName) continue;
-    const fieldId = await findFieldDefinitionIdByName(fieldName);
-    await upsertFieldDatum(personId, fieldId, value);
+    await writeField(fieldName, value);
   }
+
+  return missingFields;
 }
 
 const noteCategoryCache = new Map();

@@ -129,7 +129,7 @@ This app writes to SharePoint via Microsoft Graph, authenticating as an app
    profile, instead of scattered into whatever tab happens to be first. It
    should contain 13 fields, one per row on the profile rather than one
    combined field per category:
-   - **"Spiritual Gift #1"** through **"Spiritual Gift #5"**
+   - **"Spiritual Gift1"** through **"Spiritual Gift5"** (no space, no `#`)
    - **"Volunteer Job1"** through **"Volunteer Job5"**
    - **"Day Job"**
    - **"Volunteer Experience"**

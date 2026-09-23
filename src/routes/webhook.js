@@ -80,13 +80,16 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
     const topRoleNames = topRoles.map((r) => r.team);
     const topRolesSummary = topRoles.map((r) => `${r.team} (${r.score}%)`).join(', ');
 
-    await updateProfileFields(person.id, {
+    const missingFields = await updateProfileFields(person.id, {
       topGifts,
       topRoles: topRoleNames,
       dayJob: submission.dayJobSkill,
       volunteerExperience: submission.volunteerExperience,
       pdfLink: pcoFileId,
     });
+    if (missingFields.length > 0) {
+      console.warn(`[webhook] PCO fields not found, skipped: ${missingFields.join(', ')}`);
+    }
 
     // Human-readable reference for the Note/email — prefer the SharePoint link when it
     // exists, otherwise just say the file's attached directly to the profile.
@@ -131,9 +134,17 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
       filename,
       pdfLink: sharePointLink,
       pcoFileAttached: Boolean(pcoFileId),
+      missingFields,
     });
 
-    return res.status(200).json({ status: 'ok', filename, pcoPersonId: person.id, pdfLink: sharePointLink, pcoFileAttached: Boolean(pcoFileId) });
+    return res.status(200).json({
+      status: 'ok',
+      filename,
+      pcoPersonId: person.id,
+      pdfLink: sharePointLink,
+      pcoFileAttached: Boolean(pcoFileId),
+      missingFields,
+    });
   } catch (err) {
     console.error('[webhook] survey processing failed:', err);
     activityLog.record({ name: submission.name, email: submission.email, status: 'error', detail: err.message });

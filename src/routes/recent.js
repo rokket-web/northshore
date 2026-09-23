@@ -43,6 +43,9 @@ function renderRow(entry) {
   if (entry.detail) details.push(escapeHtml(entry.detail));
   if (entry.pdfLink) details.push(`SharePoint: <a href="${escapeHtml(entry.pdfLink)}" target="_blank" rel="noopener">PDF</a>`);
   if (entry.pcoFileAttached) details.push('PCO file: attached');
+  if (entry.missingFields?.length) {
+    details.push(`<span style="color:#B4543A">Fields not found in PCO (name mismatch?): ${escapeHtml(entry.missingFields.join(', '))}</span>`);
+  }
 
   return `<tr>
     <td>${escapeHtml(new Date(entry.at).toLocaleString())}</td>

@@ -64,14 +64,27 @@ async function sendCompletionAlert(submission, { person, pdfLink, topGifts, topR
     return;
   }
 
+  const pastorRequest = Boolean(submission.pastorRequest);
+
   const lines = [
-    `${submission.name || 'Someone'} completed the Spiritual Gifts & Volunteer Match quiz — their Planning Center profile has been updated.`,
+    pastorRequest
+      ? `${submission.name || 'Someone'} completed the Spiritual Gifts & Volunteer Match quiz and asked to talk something through with a pastor.`
+      : `${submission.name || 'Someone'} completed the Spiritual Gifts & Volunteer Match quiz — their Planning Center profile has been updated.`,
     ``,
     `Name: ${submission.name || '(not given)'}`,
     `Email: ${submission.email}`,
     `PCO person id: ${person.id}`,
     `Submitted at: ${submission.submittedAt || '(unknown)'}`,
   ];
+
+  if (pastorRequest) {
+    lines.push(
+      ``,
+      `They checked "I discovered something surprising during this and would like to talk this through with a Northshore Pastor."`,
+      `Note from them:`,
+      submission.pastorNote || '(no additional note provided)'
+    );
+  }
 
   if (topGifts?.length) lines.push(``, `Top gifts: ${topGifts.join(', ')}`);
   if (topRoles) lines.push(`Top volunteer matches: ${topRoles}`);
@@ -80,11 +93,11 @@ async function sendCompletionAlert(submission, { person, pdfLink, topGifts, topR
   if (pdfLink) lines.push(``, `Full results PDF: ${pdfLink}`);
   else lines.push(``, `(PDF link not available yet — SharePoint upload may not be configured.)`);
 
-  await sendMail({
-    to: config.mail.staffAlertEmail,
-    subject: `Spiritual Gifts quiz completed: ${submission.name || submission.email}`,
-    body: lines.join('\n'),
-  });
+  const subject = pastorRequest
+    ? `Pastor follow-up requested: ${submission.name || submission.email}`
+    : `Spiritual Gifts quiz completed: ${submission.name || submission.email}`;
+
+  await sendMail({ to: config.mail.staffAlertEmail, subject, body: lines.join('\n') });
 }
 
 module.exports = { sendMail, sendUnmatchedAlert, sendCompletionAlert };
