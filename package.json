@@ -1,0 +1,22 @@
+{
+  "name": "northshore-survey-connector",
+  "version": "1.0.0",
+  "description": "Receives Webflow survey submissions, generates a PDF, saves it to SharePoint, and updates the matching Planning Center Online profile.",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@azure/identity": "^4.4.1",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pdfkit": "^0.15.0"
+  }
+}

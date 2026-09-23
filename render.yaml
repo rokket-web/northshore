@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: northshore-survey-connector
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: WEBFLOW_WEBHOOK_SECRET
+        sync: false
+      - key: AZURE_TENANT_ID
+        sync: false
+      - key: AZURE_CLIENT_ID
+        sync: false
+      - key: AZURE_CLIENT_SECRET
+        sync: false
+      - key: SHAREPOINT_SITE_ID
+        sync: false
+      - key: SHAREPOINT_DRIVE_PATH
+        value: Survey Responses
+      - key: PCO_APP_ID
+        sync: false
+      - key: PCO_SECRET
+        sync: false
