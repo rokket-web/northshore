@@ -729,7 +729,7 @@ function buildSurveyPayload(){
     topGifts: topGifts(norm, 5),
     disc: {letter: disc.letter, counts: disc.counts},
     mbti: {type: mtype},
-    topRoles: matches.slice(0, 6).map(m => ({team: m.role.team, score: Math.round(m.score * 100)})),
+    topRoles: matches.slice(0, 6).map(m => ({team: m.role.team, score: Math.round(m.score * 100), desc: m.role.desc})),
     schedule: Array.from(S.schedule),
     skills: Array.from(S.skills),
     faithStory: Array.from(S.faithStory),
