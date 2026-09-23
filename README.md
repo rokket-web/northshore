@@ -133,19 +133,24 @@ This app writes to SharePoint via Microsoft Graph, authenticating as an app
    - **"Volunteer Job1"** through **"Volunteer Job5"**
    - **"Day Job"**
    - **"Volunteer Experience"**
-   - **"Full Assessment"** — the PDF link (PCO's People API has no general
-     file/document storage on a profile, so a link is the closest equivalent
-     to "the PDF on their profile")
+   - **"Full Assessment"** — type **File**. The PDF itself is uploaded
+     through PCO's own file-upload API (`upload.planningcenteronline.com`,
+     same PCO credentials as everything else) and attached as this field's
+     value — no Azure/SharePoint involved for this part at all. (If a
+     SharePoint copy also succeeds, that link is used in the history Note
+     and staff email since it's easier to read than a raw file reference;
+     the SharePoint upload is otherwise fully independent of this field.)
 
-   Field type (Text, Text Area, Dropdown, etc.) doesn't matter to the write —
-   the app always POSTs a plain value through the API, the same as typing
-   into a Text field. If a field is a Dropdown and the value doesn't match an
-   existing option yet, PCO's API automatically adds it as a new option — no
-   manual setup of every possible gift/role name needed, and no one ever has
-   to manually pick anything, since nothing here is a human filling out a
-   form. **"Volunteer Job1"**–**"Job5"** get just the team name (e.g. "Life
-   Group Leader") without the match percentage, to keep each field clean;
-   the match percentage is still in the PDF and the history Note.
+   Field type (Text, Text Area, Dropdown, etc.) doesn't matter to the write
+   for the 12 text-ish fields — the app always POSTs a plain value through
+   the API, the same as typing into a Text field. If a field is a Dropdown
+   and the value doesn't match an existing option yet, PCO's API
+   automatically adds it as a new option — no manual setup of every
+   possible gift/role name needed, and no one ever has to manually pick
+   anything, since nothing here is a human filling out a form.
+   **"Volunteer Job1"**–**"Job5"** get just the team name (e.g. "Life Group
+   Leader") without the match percentage, to keep each field clean; the
+   match percentage is still in the PDF and the history Note.
 
    Both the tab name and field names must match exactly what's in
    `src/services/pcoService.js` (`TAB_NAME`, `GIFT_RANK_FIELD_NAMES`,

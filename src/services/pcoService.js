@@ -25,6 +25,37 @@ async function pcoRequest(path, options = {}) {
   return res.status === 204 ? null : res.json();
 }
 
+// PCO's generic file-upload service, shared across all their products — separate from
+// the people/v2 API above. Returns a short-lived file UUID that must be attached to a
+// resource (here, a FieldDatum's value) shortly after upload or it expires unused.
+const UPLOAD_URL = 'https://upload.planningcenteronline.com/v2/files';
+
+/**
+ * Uploads a file to PCO and returns its file UUID, for use as a FieldDatum value on a
+ * File-type custom field (e.g. "Full Assessment"). Uses the same PCO Personal Access
+ * Token as everything else in this file — no Azure/SharePoint involved.
+ */
+async function uploadFile(buffer, filename, contentType) {
+  const form = new FormData();
+  form.append('file', new Blob([buffer], { type: contentType }), filename);
+
+  const res = await fetch(UPLOAD_URL, {
+    method: 'POST',
+    headers: { Authorization: authHeader() },
+    body: form,
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`PCO file upload failed: ${res.status} ${body}`);
+  }
+
+  const result = await res.json();
+  const fileId = result.data?.[0]?.id;
+  if (!fileId) throw new Error(`PCO file upload succeeded but returned no file id: ${JSON.stringify(result)}`);
+  return fileId;
+}
+
 /**
  * Finds the single PCO person matching a submission's email address, disambiguating
  * by name when the email is shared across multiple people (common for spouses or
@@ -228,20 +259,19 @@ async function addAssessmentNote(personId, { topGifts, topRoles, dayJob, volunte
   if (pdfLink) lines.push(`Full results PDF: ${pdfLink}`);
 
   const categoryId = await findNoteCategoryIdByName(NOTE_CATEGORY_NAME);
-  const relationships = categoryId
-    ? { note_category: { data: { type: 'NoteCategory', id: categoryId } } }
-    : undefined;
 
   return pcoRequest(`/people/${personId}/notes`, {
     method: 'POST',
     body: JSON.stringify({
       data: {
         type: 'Note',
-        attributes: { note: lines.join('\n') },
-        ...(relationships ? { relationships } : {}),
+        attributes: {
+          note: lines.join('\n'),
+          ...(categoryId ? { note_category_id: categoryId } : {}),
+        },
       },
     }),
   });
 }
 
-module.exports = { findMatchingPerson, updatePerson, updateProfileFields, addAssessmentNote };
+module.exports = { findMatchingPerson, updatePerson, updateProfileFields, addAssessmentNote, uploadFile };

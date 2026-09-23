@@ -41,7 +41,8 @@ function renderRow(entry) {
   if (entry.topGifts?.length) details.push(`Gifts: ${escapeHtml(entry.topGifts.join(', '))}`);
   if (entry.topRoles?.length) details.push(`Roles: ${escapeHtml(entry.topRoles.join(', '))}`);
   if (entry.detail) details.push(escapeHtml(entry.detail));
-  if (entry.pdfLink) details.push(`<a href="${escapeHtml(entry.pdfLink)}" target="_blank" rel="noopener">PDF</a>`);
+  if (entry.pdfLink) details.push(`SharePoint: <a href="${escapeHtml(entry.pdfLink)}" target="_blank" rel="noopener">PDF</a>`);
+  if (entry.pcoFileAttached) details.push('PCO file: attached');
 
   return `<tr>
     <td>${escapeHtml(new Date(entry.at).toLocaleString())}</td>

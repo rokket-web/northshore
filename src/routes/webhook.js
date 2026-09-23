@@ -2,7 +2,7 @@ const express = require('express');
 const config = require('../config');
 const { renderSurveyPdf } = require('../services/pdfService');
 const { uploadSurveyPdf, createSharingLink } = require('../services/sharepointService');
-const { findMatchingPerson, updateProfileFields, addAssessmentNote } = require('../services/pcoService');
+const { findMatchingPerson, updateProfileFields, addAssessmentNote, uploadFile } = require('../services/pcoService');
 const { sendUnmatchedAlert, sendCompletionAlert } = require('../services/mailService');
 const activityLog = require('../services/activityLog');
 
@@ -38,15 +38,15 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
     const pdfBuffer = await renderSurveyPdf(submission);
     const filename = buildFilename(submission);
 
-    // SharePoint isn't required for the PCO side to work, and a temporary Azure/SharePoint
-    // problem shouldn't block updating PCO — so this failing is a warning, not fatal. The
-    // "Full Assessment" field/note line is just skipped (falsy pdfLink) until it succeeds.
-    let pdfLink = null;
+    // SharePoint copy, for the shared-directory requirement — independent of PCO, and
+    // not required for "Full Assessment" to work (that's the PCO file upload below).
+    // Not fatal: a temporary Azure/SharePoint problem shouldn't block the rest.
+    let sharePointLink = null;
     try {
       const driveItem = await uploadSurveyPdf(filename, pdfBuffer);
-      pdfLink = await createSharingLink(driveItem.id);
+      sharePointLink = await createSharingLink(driveItem.id);
     } catch (err) {
-      console.warn('[webhook] SharePoint upload failed — continuing without a PDF link:', err.message);
+      console.warn('[webhook] SharePoint upload failed — continuing without it:', err.message);
     }
 
     const match = await findMatchingPerson(submission.email, submission.name);
@@ -58,11 +58,22 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
           : `Email matched ${match.candidates.length} different people, and the submitted name didn't narrow it to one.`;
       console.warn(`[webhook] ${reason} (${submission.email})`);
       await sendUnmatchedAlert(submission, reason, match.candidates);
-      activityLog.record({ name: submission.name, email: submission.email, status: match.status, detail: reason, filename, pdfLink });
-      return res.status(202).json({ status: `pdf_saved_${match.status}_match`, filename, pdfLink });
+      activityLog.record({ name: submission.name, email: submission.email, status: match.status, detail: reason, filename, pdfLink: sharePointLink });
+      return res.status(202).json({ status: `pdf_saved_${match.status}_match`, filename, pdfLink: sharePointLink });
     }
 
     const person = match.person;
+
+    // The "Full Assessment" custom field in PCO is a File-upload field, not a link field,
+    // so it needs an actual PCO file id — uploaded via PCO's own file service, using the
+    // same PCO credentials as everything else (no Azure/SharePoint involved). Not fatal:
+    // the other fields below still get written even if this one upload fails.
+    let pcoFileId = null;
+    try {
+      pcoFileId = await uploadFile(pdfBuffer, filename, 'application/pdf');
+    } catch (err) {
+      console.warn('[webhook] PCO file upload failed — "Full Assessment" will be left blank:', err.message);
+    }
 
     const topGifts = Array.isArray(submission.topGifts) ? submission.topGifts.slice(0, 5) : [];
     const topRoles = Array.isArray(submission.topRoles) ? submission.topRoles.slice(0, 5) : [];
@@ -74,22 +85,33 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
       topRoles: topRoleNames,
       dayJob: submission.dayJobSkill,
       volunteerExperience: submission.volunteerExperience,
-      pdfLink,
+      pdfLink: pcoFileId,
     });
-    await addAssessmentNote(person.id, {
-      topGifts,
-      topRoles: topRolesSummary,
-      dayJob: submission.dayJobSkill,
-      volunteerExperience: submission.volunteerExperience,
-      pdfLink,
-      submittedAt: submission.submittedAt,
-    });
+
+    // Human-readable reference for the Note/email — prefer the SharePoint link when it
+    // exists, otherwise just say the file's attached directly to the profile.
+    const pdfReference = sharePointLink || (pcoFileId ? '(attached directly to the "Full Assessment" field on their profile)' : null);
+
+    // The field writes above are the important part and already succeeded by this point —
+    // a problem adding the history note shouldn't turn that into a failed request.
+    try {
+      await addAssessmentNote(person.id, {
+        topGifts,
+        topRoles: topRolesSummary,
+        dayJob: submission.dayJobSkill,
+        volunteerExperience: submission.volunteerExperience,
+        pdfLink: pdfReference,
+        submittedAt: submission.submittedAt,
+      });
+    } catch (err) {
+      console.warn('[webhook] adding history note failed:', err.message);
+    }
 
     // A failed staff notification shouldn't undo the PCO update that already succeeded.
     try {
       await sendCompletionAlert(submission, {
         person,
-        pdfLink,
+        pdfLink: pdfReference,
         topGifts,
         topRoles: topRolesSummary,
         dayJob: submission.dayJobSkill,
@@ -107,10 +129,11 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
       topGifts,
       topRoles: topRoleNames,
       filename,
-      pdfLink,
+      pdfLink: sharePointLink,
+      pcoFileAttached: Boolean(pcoFileId),
     });
 
-    return res.status(200).json({ status: 'ok', filename, pcoPersonId: person.id, pdfLink });
+    return res.status(200).json({ status: 'ok', filename, pcoPersonId: person.id, pdfLink: sharePointLink, pcoFileAttached: Boolean(pcoFileId) });
   } catch (err) {
     console.error('[webhook] survey processing failed:', err);
     activityLog.record({ name: submission.name, email: submission.email, status: 'error', detail: err.message });
