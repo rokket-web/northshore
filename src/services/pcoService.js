@@ -84,27 +84,47 @@ async function updatePerson(personId, attributes) {
   });
 }
 
-const fieldDefinitionCache = new Map();
-
-// These must already exist in PCO under People → Organization Settings → Custom Fields
-// (create once, by hand — see README). Rename values here if you name them differently there.
+// These must already exist in PCO under People → Configuration → Custom Fields, grouped
+// under this tab (create once, by hand — see README). Rename here if you name them
+// differently there. Field names aren't guaranteed unique across tabs in PCO, so lookups
+// below scope to this tab rather than matching on name alone.
+const TAB_NAME = 'Spiritual Gifts';
 const FIELD_NAMES = {
-  topGifts: 'Top Spiritual Gifts',
-  topRoles: 'Top Volunteer Matches',
-  dayJob: 'Day Job / Professional Skill',
-  volunteerExperience: 'Previous Volunteer Experience',
-  pdfLink: 'Spiritual Gifts Assessment PDF',
+  topGifts: 'Top 5 Spiritual Gifts',
+  topRoles: 'Top 5 Volunteer Matches',
+  dayJob: 'Day Job',
+  volunteerExperience: 'Volunteer Experience',
+  pdfLink: 'PDF',
 };
+
+let tabIdPromise;
+
+async function findTabIdByName(name) {
+  const query = new URLSearchParams({ 'where[name]': name });
+  const result = await pcoRequest(`/tabs?${query.toString()}`);
+  const id = result.data?.[0]?.id || null;
+  if (!id) {
+    console.warn(`[pco] No custom field tab named "${name}" found — field lookups will fall back to an unscoped name search. Create the tab in PCO first (see README).`);
+  }
+  return id;
+}
+
+const fieldDefinitionCache = new Map();
 
 async function findFieldDefinitionIdByName(name) {
   if (fieldDefinitionCache.has(name)) return fieldDefinitionCache.get(name);
 
+  if (!tabIdPromise) tabIdPromise = findTabIdByName(TAB_NAME);
+  const tabId = await tabIdPromise;
+
   const query = new URLSearchParams({ 'where[name]': name });
+  if (tabId) query.set('where[tab_id]', tabId);
+
   const result = await pcoRequest(`/field_definitions?${query.toString()}`);
   const id = result.data?.[0]?.id || null;
 
   if (!id) {
-    console.warn(`[pco] No field definition named "${name}" found — create it in PCO first. Skipping update.`);
+    console.warn(`[pco] No field definition named "${name}"${tabId ? ` on the "${TAB_NAME}" tab` : ''} found — create it in PCO first. Skipping update.`);
   }
   fieldDefinitionCache.set(name, id);
   return id;

@@ -106,19 +106,24 @@ This app writes to SharePoint via Microsoft Graph, authenticating as an app
 1. Generate a Personal Access Token at
    https://api.planningcenteronline.com/oauth/applications → App ID and
    Secret become `PCO_APP_ID` / `PCO_SECRET` (sent as HTTP Basic auth).
-2. In PCO People → **Organization Settings → Custom Fields**, create five
-   fields (any tab/category works):
-   - **"Top Spiritual Gifts"** — type **Text**
-   - **"Top Volunteer Matches"** — type **Text**
-   - **"Day Job / Professional Skill"** — type **Text**
-   - **"Previous Volunteer Experience"** — type **Text Area** (can run long)
-   - **"Spiritual Gifts Assessment PDF"** — type **Website** (renders as a
-     clickable link on the profile — PCO's People API has no general file/
-     document storage on a profile, so a link is the closest equivalent to
-     "the PDF on their profile")
+2. In PCO People → **Configuration → Custom Fields**, use the **"Spiritual
+   Gifts"** tab (create it via **Add tab** if it doesn't exist yet) — this is
+   what makes the results show up together under their own tab on a person's
+   profile, instead of scattered into whatever tab happens to be first. It
+   should contain five fields:
+   - **"Top 5 Spiritual Gifts"** — type **Text**
+   - **"Top 5 Volunteer Matches"** — type **Text**
+   - **"Day Job"** — type **Text**
+   - **"Volunteer Experience"** — type **Text Area** (can run long)
+   - **"PDF"** — type **Website** (renders as a clickable link on the profile
+     — PCO's People API has no general file/document storage on a profile,
+     so a link is the closest equivalent to "the PDF on their profile")
 
-   The names must match exactly what's in `src/services/pcoService.js`
-   (`FIELD_NAMES`) — update one side if you'd rather name them differently.
+   Both the tab name and field names must match exactly what's in
+   `src/services/pcoService.js` (`TAB_NAME` / `FIELD_NAMES`) — update the code
+   if you'd rather name them differently. If the tab isn't found, field
+   lookups fall back to matching by name only (a warning is logged), so it
+   still works if you skip the tab — you just lose the grouping.
 3. Optionally, in **Organization Settings → Note Categories**, create a
    **"Spiritual Gifts Assessment"** category so the history notes (added each
    time someone takes/retakes the quiz) are grouped and filterable on a
