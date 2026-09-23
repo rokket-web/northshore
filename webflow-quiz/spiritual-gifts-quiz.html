@@ -708,9 +708,9 @@ function radarSvg(norm){
 
 /* ===================== BACKEND SUBMISSION ===================== */
 // Sends the current results to the Render app, which generates a PDF, saves it to
-// SharePoint, and updates the person's Planning Center profile. Fire-and-forget:
-// failures are logged but never block or interrupt the quiz UI.
-let submitDebounceTimer = null;
+// SharePoint, updates the person's Planning Center profile, and emails staff a
+// completion summary. Only fires when the visitor clicks "Complete My Profile" —
+// see the click handler near the end of renderResults().
 
 function buildSurveyPayload(){
   const {norm} = computeGiftScores();
@@ -741,8 +741,10 @@ function buildSurveyPayload(){
   };
 }
 
+// Returns true on success, false on any failure — the click handler uses this to show
+// a real success/error state instead of firing silently.
 async function submitToBackend(){
-  if (!S.email) return; // nothing to match a PCO profile with yet
+  if (!S.email) return false;
   try {
     const headers = {'Content-Type': 'application/json'};
     if (SURVEY_WEBHOOK_TOKEN) headers['x-webhook-secret'] = SURVEY_WEBHOOK_TOKEN;
@@ -751,17 +753,15 @@ async function submitToBackend(){
       headers,
       body: JSON.stringify(buildSurveyPayload()),
     });
-    if (!res.ok) console.warn('[survey] backend submission failed:', res.status, await res.text().catch(() => ''));
+    if (!res.ok) {
+      console.warn('[survey] backend submission failed:', res.status, await res.text().catch(() => ''));
+      return false;
+    }
+    return true;
   } catch (err) {
     console.warn('[survey] backend submission failed:', err);
+    return false;
   }
-}
-
-// Debounced so repeated edits (day job, volunteer experience, pastor note) collapse
-// into one request instead of firing on every keystroke.
-function scheduleBackendSubmit(){
-  clearTimeout(submitDebounceTimer);
-  submitDebounceTimer = setTimeout(submitToBackend, 800);
 }
 
 function buildResultsMailto(topGiftsList, disc, mtype, matches){
@@ -887,16 +887,23 @@ function renderResults(){
     <a id="sendBtn" href="${buildResultsMailto(topGifts(computeGiftScores().norm, 5), disc, mtype, matches)}" class="btn-primary" style="display:inline-block;text-decoration:none">Email my results to our team &rarr;</a>
   </div>
 
+  <div class="card" id="completeCard">
+    <h3>Complete your profile</h3>
+    <p class="small">This saves your results to your Northshore volunteer profile and lets our team follow up with you — nothing is saved until you click below.</p>
+    <button id="completeProfileBtn" class="btn-primary" style="width:100%">Complete My Profile &rarr;</button>
+    <p class="small" id="completeStatus" style="margin-top:10px;margin-bottom:0"></p>
+  </div>
+
   <div class="btnrow">
     <button class="btn-ghost" id="backBtn">&larr; Back</button>
     <button class="btn-ghost" id="restartBtn">Start over</button>
   </div>
   `;
 
-  document.getElementById('dayJobInput').addEventListener('input', e => { S.dayJobSkill = e.target.value; refreshMailtoLink(matches, norm, mtype, disc); scheduleBackendSubmit(); });
-  document.getElementById('volExpInput').addEventListener('input', e => { S.volunteerExperience = e.target.value; refreshMailtoLink(matches, norm, mtype, disc); scheduleBackendSubmit(); });
-  document.getElementById('nameInput2').addEventListener('input', e => { S.name = e.target.value; refreshMailtoLink(matches, norm, mtype, disc); scheduleBackendSubmit(); });
-  document.getElementById('emailInput2').addEventListener('input', e => { S.email = e.target.value; refreshMailtoLink(matches, norm, mtype, disc); scheduleBackendSubmit(); });
+  document.getElementById('dayJobInput').addEventListener('input', e => { S.dayJobSkill = e.target.value; refreshMailtoLink(matches, norm, mtype, disc); });
+  document.getElementById('volExpInput').addEventListener('input', e => { S.volunteerExperience = e.target.value; refreshMailtoLink(matches, norm, mtype, disc); });
+  document.getElementById('nameInput2').addEventListener('input', e => { S.name = e.target.value; refreshMailtoLink(matches, norm, mtype, disc); });
+  document.getElementById('emailInput2').addEventListener('input', e => { S.email = e.target.value; refreshMailtoLink(matches, norm, mtype, disc); });
   document.getElementById('pastorCheckbox').addEventListener('change', e => {
     S.pastorRequest = e.target.checked;
     renderResults();
@@ -908,7 +915,7 @@ function renderResults(){
     cb.dispatchEvent(new Event('change'));
   });
   const pastorNoteEl = document.getElementById('pastorNote');
-  if (pastorNoteEl) pastorNoteEl.addEventListener('input', e => { S.pastorNote = e.target.value; refreshMailtoLink(matches, norm, mtype, disc); scheduleBackendSubmit(); });
+  if (pastorNoteEl) pastorNoteEl.addEventListener('input', e => { S.pastorNote = e.target.value; refreshMailtoLink(matches, norm, mtype, disc); });
   document.getElementById('backBtn').addEventListener('click', () => go(-1));
   document.getElementById('restartBtn').addEventListener('click', () => {
     S.step = 0; S.answers = {}; S.disc = {}; S.mbti = {};
@@ -918,10 +925,26 @@ function renderResults(){
     render();
   });
 
-  // Fires automatically as soon as results are computed (covers visitors who never touch
-  // the optional fields below or never click "Email my results"); the listeners above
-  // re-fire it with the latest data whenever those fields change.
-  scheduleBackendSubmit();
+  document.getElementById('completeProfileBtn').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const status = document.getElementById('completeStatus');
+    if (!S.email) {
+      status.textContent = 'Please enter your email above first.';
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Completing…';
+    status.textContent = '';
+    const ok = await submitToBackend();
+    if (ok) {
+      btn.textContent = 'Profile Completed ✓';
+      status.textContent = "You're all set — thanks for taking the time!";
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Complete My Profile →';
+      status.textContent = 'Something went wrong saving your profile. Please try again.';
+    }
+  });
 }
 
 function refreshMailtoLink(matches, norm, mtype, disc){

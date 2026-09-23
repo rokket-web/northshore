@@ -3,7 +3,7 @@ const config = require('../config');
 const { renderSurveyPdf } = require('../services/pdfService');
 const { uploadSurveyPdf, createSharingLink } = require('../services/sharepointService');
 const { findMatchingPerson, updateProfileFields, addAssessmentNote } = require('../services/pcoService');
-const { sendUnmatchedAlert } = require('../services/mailService');
+const { sendUnmatchedAlert, sendCompletionAlert } = require('../services/mailService');
 
 const router = express.Router();
 
@@ -81,6 +81,20 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
       pdfLink,
       submittedAt: submission.submittedAt,
     });
+
+    // A failed staff notification shouldn't undo the PCO update that already succeeded.
+    try {
+      await sendCompletionAlert(submission, {
+        person,
+        pdfLink,
+        topGifts,
+        topRoles: topRolesSummary,
+        dayJob: submission.dayJobSkill,
+        volunteerExperience: submission.volunteerExperience,
+      });
+    } catch (err) {
+      console.warn('[webhook] staff completion email failed:', err.message);
+    }
 
     return res.status(200).json({ status: 'ok', filename, pcoPersonId: person.id, pdfLink });
   } catch (err) {

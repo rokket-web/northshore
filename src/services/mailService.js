@@ -53,4 +53,38 @@ async function sendUnmatchedAlert(submission, reason, candidates = []) {
   });
 }
 
-module.exports = { sendMail, sendUnmatchedAlert };
+/**
+ * Notifies staff that someone completed the quiz and their PCO profile was updated —
+ * sent on every successful "Complete My Profile" submission, not just failures, so
+ * staff see every completion rather than only the ones that needed manual review.
+ */
+async function sendCompletionAlert(submission, { person, pdfLink, topGifts, topRoles, dayJob, volunteerExperience }) {
+  if (!config.mail.staffAlertEmail) {
+    console.warn('[mail] STAFF_ALERT_EMAIL not set — skipping completion notification.');
+    return;
+  }
+
+  const lines = [
+    `${submission.name || 'Someone'} completed the Spiritual Gifts & Volunteer Match quiz — their Planning Center profile has been updated.`,
+    ``,
+    `Name: ${submission.name || '(not given)'}`,
+    `Email: ${submission.email}`,
+    `PCO person id: ${person.id}`,
+    `Submitted at: ${submission.submittedAt || '(unknown)'}`,
+  ];
+
+  if (topGifts?.length) lines.push(``, `Top gifts: ${topGifts.join(', ')}`);
+  if (topRoles) lines.push(`Top volunteer matches: ${topRoles}`);
+  if (dayJob) lines.push(`Day job / professional skill: ${dayJob}`);
+  if (volunteerExperience) lines.push(`Previous volunteer experience: ${volunteerExperience}`);
+  if (pdfLink) lines.push(``, `Full results PDF: ${pdfLink}`);
+  else lines.push(``, `(PDF link not available yet — SharePoint upload may not be configured.)`);
+
+  await sendMail({
+    to: config.mail.staffAlertEmail,
+    subject: `Spiritual Gifts quiz completed: ${submission.name || submission.email}`,
+    body: lines.join('\n'),
+  });
+}
+
+module.exports = { sendMail, sendUnmatchedAlert, sendCompletionAlert };
