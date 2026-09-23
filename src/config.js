@@ -35,4 +35,8 @@ module.exports = {
     senderUpn: process.env.MAIL_SENDER_UPN || '',
     staffAlertEmail: process.env.STAFF_ALERT_EMAIL || '',
   },
+
+  admin: {
+    password: process.env.ADMIN_PASSWORD || '',
+  },
 };

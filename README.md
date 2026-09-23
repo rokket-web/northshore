@@ -3,9 +3,11 @@
 Backend for the Spiritual Gifts & Volunteer Match quiz. `GET /` is a simple "NORTHSHORE"
 landing page and `GET /quiz` serves the quiz itself
 ([webflow-quiz/spiritual-gifts-quiz.html](webflow-quiz/spiritual-gifts-quiz.html)) — it runs
-entirely in the visitor's browser; when they reach the results screen it POSTs its results
-directly to this app, which renders a PDF, saves it to SharePoint, and updates the matching
-Planning Center Online (PCO) person profile.
+entirely in the visitor's browser; when a visitor clicks "Complete My Profile" on the
+results screen, it POSTs their results to this app, which renders a PDF, saves it to
+SharePoint, and updates the matching Planning Center Online (PCO) person profile.
+`GET /recent` (password-protected via `ADMIN_PASSWORD`) shows a log of recent submissions
+for troubleshooting — see "Recent activity log" below.
 
 ## Flow
 
@@ -42,6 +44,21 @@ conservative: it never guesses, and it never creates a new PCO person.
 - **No duplicate field data**: the custom-field writes upsert (check for an existing
   value for that person+field before creating a new one) rather than blindly POSTing,
   so retaking the quiz never creates duplicate field entries.
+
+## Recent activity log
+
+`GET /recent` shows the last 200 submissions (name, email, matched/unmatched status,
+PCO person id, PDF link, errors) — useful for confirming a test submission actually went
+through end-to-end. Two things to know:
+
+- **Password-protected**: it shows submitter names and emails, so it refuses to load at
+  all unless `ADMIN_PASSWORD` is set (browser will prompt for login — any username, that
+  password). Set it in Render's env vars like everything else.
+- **Not permanent**: the log lives in memory (`src/services/activityLog.js`), so it
+  resets on every deploy and whenever Render's free tier spins the container down from
+  idling and back up. It's for "did the last few submissions work," not a durable audit
+  trail — if you need real history later, that's a bigger change (a database or writing
+  each event somewhere persistent), let me know if that becomes worth doing.
 
 ## Setup
 

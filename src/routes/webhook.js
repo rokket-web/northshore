@@ -4,6 +4,7 @@ const { renderSurveyPdf } = require('../services/pdfService');
 const { uploadSurveyPdf, createSharingLink } = require('../services/sharepointService');
 const { findMatchingPerson, updateProfileFields, addAssessmentNote } = require('../services/pcoService');
 const { sendUnmatchedAlert, sendCompletionAlert } = require('../services/mailService');
+const activityLog = require('../services/activityLog');
 
 const router = express.Router();
 
@@ -29,6 +30,7 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
   const submission = req.body || {};
 
   if (!submission.email) {
+    activityLog.record({ name: submission.name, email: submission.email, status: 'rejected', detail: 'missing email' });
     return res.status(422).json({ error: 'submission is missing an email address, cannot match to a PCO profile' });
   }
 
@@ -56,6 +58,7 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
           : `Email matched ${match.candidates.length} different people, and the submitted name didn't narrow it to one.`;
       console.warn(`[webhook] ${reason} (${submission.email})`);
       await sendUnmatchedAlert(submission, reason, match.candidates);
+      activityLog.record({ name: submission.name, email: submission.email, status: match.status, detail: reason, filename, pdfLink });
       return res.status(202).json({ status: `pdf_saved_${match.status}_match`, filename, pdfLink });
     }
 
@@ -96,9 +99,21 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
       console.warn('[webhook] staff completion email failed:', err.message);
     }
 
+    activityLog.record({
+      name: submission.name,
+      email: submission.email,
+      status: 'matched',
+      pcoPersonId: person.id,
+      topGifts,
+      topRoles: topRoleNames,
+      filename,
+      pdfLink,
+    });
+
     return res.status(200).json({ status: 'ok', filename, pcoPersonId: person.id, pdfLink });
   } catch (err) {
     console.error('[webhook] survey processing failed:', err);
+    activityLog.record({ name: submission.name, email: submission.email, status: 'error', detail: err.message });
     return res.status(500).json({ error: 'processing failed' });
   }
 });
