@@ -129,6 +129,7 @@ const ROLE_RANK_FIELD_NAMES = ['Volunteer Job1', 'Volunteer Job2', 'Volunteer Jo
 const SINGLE_FIELD_NAMES = {
   dayJob: 'Day Job',
   volunteerExperience: 'Volunteer Experience',
+  contactMeVolunteering: 'Contact Me about Volunteering',
   pdfLink: 'Full Assessment',
 };
 

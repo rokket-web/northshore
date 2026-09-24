@@ -6,32 +6,102 @@ const { getGraphClient } = require('./graphClient');
  * Requires the app registration to have the application permission Mail.Send —
  * see README for the Exchange Application Access Policy needed to scope this to
  * one mailbox instead of every mailbox in the tenant.
+ *
+ * @param {object} opts
+ * @param {{filename: string, contentType: string, content: Buffer}} [opts.attachment]
  */
-async function sendMail({ to, subject, body }) {
+async function sendMail({ to, subject, body, attachment }) {
   if (!config.mail.senderUpn || !to) return;
 
+  const message = {
+    subject,
+    body: { contentType: 'Text', content: body },
+    toRecipients: [{ emailAddress: { address: to } }],
+  };
+
+  if (attachment) {
+    message.attachments = [
+      {
+        '@odata.type': '#microsoft.graph.fileAttachment',
+        name: attachment.filename,
+        contentType: attachment.contentType,
+        contentBytes: attachment.content.toString('base64'),
+      },
+    ];
+  }
+
   const client = getGraphClient();
-  await client.api(`/users/${config.mail.senderUpn}/sendMail`).post({
-    message: {
-      subject,
-      body: { contentType: 'Text', content: body },
-      toRecipients: [{ emailAddress: { address: to } }],
-    },
-  });
+  await client.api(`/users/${config.mail.senderUpn}/sendMail`).post({ message });
+}
+
+/**
+ * Renders every result field from a raw submission into readable text — used when
+ * staff will only have the email to go on (no PCO profile with these values), so
+ * nothing should be left out of it.
+ */
+function formatFullResults(submission) {
+  const lines = [];
+
+  if (submission.topGifts?.length) {
+    lines.push('', 'Top spiritual gifts:');
+    submission.topGifts.forEach((gift) => {
+      const pct = submission.giftScores?.[gift];
+      lines.push(`- ${gift}${pct !== undefined ? ` (${pct}%)` : ''}`);
+    });
+  }
+
+  if (submission.giftScores && Object.keys(submission.giftScores).length > 0) {
+    lines.push('', 'Full gift scores:');
+    Object.entries(submission.giftScores)
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([gift, pct]) => lines.push(`- ${gift}: ${pct}%`));
+  }
+
+  if (submission.disc?.letter || submission.mbti?.type) {
+    lines.push('', 'Personality snapshot:');
+    if (submission.disc?.letter) lines.push(`- DISC style: ${submission.disc.letter}`);
+    if (submission.mbti?.type) lines.push(`- MBTI type: ${submission.mbti.type}`);
+  }
+
+  if (submission.topRoles?.length) {
+    lines.push('', 'Top volunteer matches:');
+    submission.topRoles.forEach((r) => lines.push(`- ${r.team} (${r.score}%)${r.desc ? ` — ${r.desc}` : ''}`));
+  }
+
+  if (submission.schedule?.length) lines.push('', `Availability: ${submission.schedule.join(', ')}`);
+  if (submission.skills?.length) lines.push(`Skills / interests: ${submission.skills.join(', ')}`);
+  if (submission.faithStory?.length) lines.push(`Faith story: ${submission.faithStory.join(', ')}`);
+  if (submission.dayJobSkill) lines.push('', `Day job / professional skill offered: ${submission.dayJobSkill}`);
+  if (submission.volunteerExperience) lines.push(`Previous volunteer experience: ${submission.volunteerExperience}`);
+
+  if (submission.pastorRequest) {
+    lines.push(
+      '',
+      'They checked "I discovered something surprising during this and would like to talk this through with a Northshore Pastor."',
+      `Note from them: ${submission.pastorNote || '(no additional note provided)'}`
+    );
+  }
+
+  return lines;
 }
 
 /**
  * Alerts staff that a survey submission couldn't be confidently matched to exactly
- * one PCO person, so it doesn't just silently vanish into a server log.
+ * one PCO person, so it doesn't just silently vanish into a server log. Includes every
+ * result field (there's no PCO profile to look them up on yet) and attaches the
+ * generated PDF directly, rather than relying on a SharePoint link that may not exist
+ * if Azure isn't configured.
+ *
+ * @param {{filename: string, content: Buffer}} [pdf]
  */
-async function sendUnmatchedAlert(submission, reason, candidates = []) {
+async function sendUnmatchedAlert(submission, reason, candidates = [], pdf) {
   if (!config.mail.staffAlertEmail) {
     console.warn('[mail] STAFF_ALERT_EMAIL not set — skipping unmatched-submission alert.');
     return;
   }
 
   const lines = [
-    `A spiritual gifts quiz submission could not be matched to exactly one Planning Center profile.`,
+    `A spiritual gifts quiz submission could not be matched to exactly one PCO person.`,
     ``,
     `Reason: ${reason}`,
     `Submitted name: ${submission.name || '(not given)'}`,
@@ -44,12 +114,14 @@ async function sendUnmatchedAlert(submission, reason, candidates = []) {
     candidates.forEach((p) => lines.push(`- ${p.attributes?.name || p.id} (person id ${p.id})`));
   }
 
-  lines.push(``, `The generated PDF was still saved to SharePoint under this person's name/date.`);
+  lines.push(...formatFullResults(submission));
+  lines.push('', pdf ? 'The full results PDF is attached to this email.' : '(PDF attachment not available.)');
 
   await sendMail({
     to: config.mail.staffAlertEmail,
     subject: `Spiritual Gifts quiz: needs manual PCO match (${submission.name || submission.email || 'unknown'})`,
     body: lines.join('\n'),
+    attachment: pdf ? { filename: pdf.filename, contentType: 'application/pdf', content: pdf.content } : undefined,
   });
 }
 

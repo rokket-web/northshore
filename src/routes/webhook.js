@@ -13,10 +13,27 @@ function verifyWebhookSecret(req) {
   return req.get('x-webhook-secret') === config.webflow.webhookSecret;
 }
 
+// "last_first_Assessment_year-month-day.pdf" — the submitted name is one free-text field,
+// so the last word is treated as the last name and everything before it as the first
+// (handles multi-word first names like "Mary Jane Doe"). A single-word or missing name
+// falls back gracefully rather than guessing which part is missing.
 function buildFilename(submission) {
-  const namePart = (submission.name || 'Unknown').trim().replace(/[^a-z0-9]+/gi, '_') || 'Unknown';
+  const sanitize = (s) => s.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '');
+  const nameParts = (submission.name || '').trim().split(/\s+/).filter(Boolean);
+
+  let namePart;
+  if (nameParts.length === 0) {
+    namePart = 'Unknown';
+  } else if (nameParts.length === 1) {
+    namePart = sanitize(nameParts[0]) || 'Unknown';
+  } else {
+    const last = sanitize(nameParts[nameParts.length - 1]) || 'Unknown';
+    const first = sanitize(nameParts.slice(0, -1).join('_')) || 'Unknown';
+    namePart = `${last}_${first}`;
+  }
+
   const datePart = (submission.submittedAt || new Date().toISOString()).slice(0, 10); // YYYY-MM-DD
-  return `${namePart}_Spiritual_Gifts_${datePart}.pdf`;
+  return `${namePart}_Assessment_${datePart}.pdf`;
 }
 
 // Body shape posted by webflow-quiz/spiritual-gifts-quiz.html's buildSurveyPayload():
@@ -57,7 +74,7 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
           ? 'No PCO person found with this email address.'
           : `Email matched ${match.candidates.length} different people, and the submitted name didn't narrow it to one.`;
       console.warn(`[webhook] ${reason} (${submission.email})`);
-      await sendUnmatchedAlert(submission, reason, match.candidates);
+      await sendUnmatchedAlert(submission, reason, match.candidates, { filename, content: pdfBuffer });
       activityLog.record({ name: submission.name, email: submission.email, status: match.status, detail: reason, filename, pdfLink: sharePointLink });
       return res.status(202).json({ status: `pdf_saved_${match.status}_match`, filename, pdfLink: sharePointLink });
     }
@@ -85,6 +102,9 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
       topRoles: topRoleNames,
       dayJob: submission.dayJobSkill,
       volunteerExperience: submission.volunteerExperience,
+      // Checked by default on the quiz; only written when true so an unchecked
+      // submission doesn't overwrite a "Yes" from someone's earlier submission.
+      contactMeVolunteering: submission.contactMeVolunteering ? 'Yes' : undefined,
       pdfLink: pcoFileId,
     });
     if (missingFields.length > 0) {

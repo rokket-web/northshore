@@ -264,6 +264,7 @@ const S = {
   under18: null,       // 'yes'|'no'
   name: "",
   email: "",
+  contactMeVolunteering: true,
   pastorRequest: false,
   pastorNote: "",
   dayJobSkill: "",
@@ -734,6 +735,7 @@ function buildSurveyPayload(){
     under18: S.under18,
     dayJobSkill: S.dayJobSkill,
     volunteerExperience: S.volunteerExperience,
+    contactMeVolunteering: S.contactMeVolunteering,
     pastorRequest: S.pastorRequest,
     pastorNote: S.pastorNote,
   };
@@ -841,6 +843,10 @@ function renderResults(){
     <h3>Your details</h3>
     <input type="text" id="nameInput2" placeholder="Your name" value="${S.name}">
     <input type="email" id="emailInput2" placeholder="Your email" value="${S.email}">
+    <div class="pair-opt ${S.contactMeVolunteering ? 'sel' : ''}" id="volunteerContactCheck" style="margin-bottom:10px">
+      <input type="checkbox" id="volunteerContactCheckbox" ${S.contactMeVolunteering ? 'checked' : ''} style="margin-right:8px;vertical-align:middle">
+      Please contact me to connect me with one of these volunteer teams.
+    </div>
     <div class="pair-opt ${S.pastorRequest ? 'sel' : ''}" id="pastorCheck" style="margin-bottom:${S.pastorRequest ? '10px' : '4px'}">
       <input type="checkbox" id="pastorCheckbox" ${S.pastorRequest ? 'checked' : ''} style="margin-right:8px;vertical-align:middle">
       I discovered something surprising during this and would like to talk this through with a Northshore Pastor.
@@ -855,6 +861,7 @@ function renderResults(){
     <h3>Complete your profile</h3>
     <p class="small">This saves your results to your Northshore volunteer profile and lets our team follow up with you — nothing is saved until you click below.</p>
     <button id="completeProfileBtn" class="btn-primary" style="width:100%">Complete My Profile &rarr;</button>
+    <p class="small" style="font-style:italic;margin-top:10px;margin-bottom:0">By providing your phone number and email, you agree to receive email and text updates from Northshore, including automated messages. Consent not required to participate. Msg &amp; data rates may apply. Reply STOP to opt out. Privacy Policy at www.northshore.church/privacy-policy.</p>
     <p class="small" id="completeStatus" style="margin-top:10px;margin-bottom:0"></p>
   </div>
 
@@ -868,6 +875,16 @@ function renderResults(){
   document.getElementById('volExpInput').addEventListener('input', e => { S.volunteerExperience = e.target.value; });
   document.getElementById('nameInput2').addEventListener('input', e => { S.name = e.target.value; });
   document.getElementById('emailInput2').addEventListener('input', e => { S.email = e.target.value; });
+  document.getElementById('volunteerContactCheckbox').addEventListener('change', e => {
+    S.contactMeVolunteering = e.target.checked;
+    renderResults();
+  });
+  document.getElementById('volunteerContactCheck').addEventListener('click', e => {
+    if (e.target.id === 'volunteerContactCheckbox') return;
+    const cb = document.getElementById('volunteerContactCheckbox');
+    cb.checked = !cb.checked;
+    cb.dispatchEvent(new Event('change'));
+  });
   document.getElementById('pastorCheckbox').addEventListener('change', e => {
     S.pastorRequest = e.target.checked;
     renderResults();
@@ -884,7 +901,7 @@ function renderResults(){
   document.getElementById('restartBtn').addEventListener('click', () => {
     S.step = 0; S.answers = {}; S.disc = {}; S.mbti = {};
     S.schedule = new Set(); S.skills = new Set(); S.faithStory = new Set();
-    S.under18 = null; S.pastorRequest = false; S.pastorNote = "";
+    S.under18 = null; S.contactMeVolunteering = true; S.pastorRequest = false; S.pastorNote = "";
     S.dayJobSkill = ""; S.volunteerExperience = "";
     render();
     window.scrollTo({top:0, behavior:'smooth'});

@@ -127,12 +127,17 @@ This app writes to SharePoint via Microsoft Graph, authenticating as an app
    Gifts"** tab (create it via **Add tab** if it doesn't exist yet) — this is
    what makes the results show up together under their own tab on a person's
    profile, instead of scattered into whatever tab happens to be first. It
-   should contain 13 fields, one per row on the profile rather than one
+   should contain 14 fields, one per row on the profile rather than one
    combined field per category:
    - **"Spiritual Gift1"** through **"Spiritual Gift5"** (no space, no `#`)
    - **"Volunteer Job1"** through **"Volunteer Job5"**
    - **"Day Job"**
    - **"Volunteer Experience"**
+   - **"Contact Me about Volunteering"** — type **Checkbox**. Written as
+     `"Yes"` when the quiz's "Please contact me to connect me with one of
+     these volunteer teams" box is checked (it's checked by default);
+     left untouched when unchecked, so an unchecked resubmission doesn't
+     erase a "Yes" from an earlier one.
    - **"Full Assessment"** — type **File**. The PDF itself is uploaded
      through PCO's own file-upload API (`upload.planningcenteronline.com`,
      same PCO credentials as everything else) and attached as this field's
@@ -141,13 +146,13 @@ This app writes to SharePoint via Microsoft Graph, authenticating as an app
      and staff email since it's easier to read than a raw file reference;
      the SharePoint upload is otherwise fully independent of this field.)
 
-   Field type (Text, Text Area, Dropdown, etc.) doesn't matter to the write
-   for the 12 text-ish fields — the app always POSTs a plain value through
-   the API, the same as typing into a Text field. If a field is a Dropdown
-   and the value doesn't match an existing option yet, PCO's API
-   automatically adds it as a new option — no manual setup of every
-   possible gift/role name needed, and no one ever has to manually pick
-   anything, since nothing here is a human filling out a form.
+   Field type (Text, Text Area, Dropdown, Checkbox, etc.) doesn't matter to
+   the write for the 13 non-file fields — the app always POSTs a plain
+   value through the API, the same as typing into a Text field. If a field
+   is a Dropdown/Checkbox and the value doesn't match an existing option
+   yet, PCO's API automatically adds it as a new option — no manual setup
+   of every possible gift/role name needed, and no one ever has to manually
+   pick anything, since nothing here is a human filling out a form.
    **"Volunteer Job1"**–**"Job5"** get just the team name (e.g. "Life Group
    Leader") without the match percentage, to keep each field clean; the
    match percentage is still in the PDF and the history Note.
