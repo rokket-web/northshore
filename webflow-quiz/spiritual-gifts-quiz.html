@@ -900,9 +900,11 @@ function renderResults(){
 
   <div class="card" id="completeCard">
     <h3>Complete your profile</h3>
-    <p class="small">This saves your results to your Northshore volunteer profile and lets our team follow up with you — nothing is saved until you click below.</p>
-    <button id="completeProfileBtn" class="btn-primary" style="width:100%">Complete My Profile &rarr;</button>
-    <p class="small" style="font-style:italic;margin-top:10px;margin-bottom:0">By providing your phone number and email, you agree to receive email and text updates from Northshore, including automated messages. Consent not required to participate. Msg &amp; data rates may apply. Reply STOP to opt out. Privacy Policy at www.northshore.church/privacy-policy.</p>
+    <div id="completeFormArea">
+      <p class="small">This saves your results to your Northshore volunteer profile and lets our team follow up with you — nothing is saved until you click below.</p>
+      <button id="completeProfileBtn" class="btn-primary" style="width:100%">Complete My Profile &rarr;</button>
+      <p class="small" style="font-style:italic;margin-top:10px;margin-bottom:0">By providing your phone number and email, you agree to receive email and text updates from Northshore, including automated messages. Consent not required to participate. Msg &amp; data rates may apply. Reply STOP to opt out. Privacy Policy at www.northshore.church/privacy-policy.</p>
+    </div>
     <p class="small" id="completeStatus" style="margin-top:10px;margin-bottom:0"></p>
   </div>
 
@@ -973,6 +975,14 @@ function renderResults(){
     if (ok) {
       btn.textContent = 'Profile Completed ✓';
       status.textContent = "You're all set — thanks for taking the time!";
+      document.getElementById('completeFormArea').style.display = 'none';
+      const card = document.getElementById('completeCard');
+      card.style.display = 'flex';
+      card.style.flexDirection = 'column';
+      card.style.alignItems = 'center';
+      card.style.justifyContent = 'center';
+      card.style.textAlign = 'center';
+      card.style.minHeight = '220px';
     } else {
       btn.disabled = false;
       btn.textContent = 'Complete My Profile →';
