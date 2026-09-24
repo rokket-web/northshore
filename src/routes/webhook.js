@@ -36,6 +36,29 @@ function buildFilename(submission) {
   return `${namePart}_Assessment_${datePart}.pdf`;
 }
 
+// Lets the visitor download their own results PDF directly from the browser
+// ("Download a PDF version of my results" checkbox on the results screen). Just
+// renders the same PDF as /survey — no PCO/SharePoint/mail involved, so a person
+// generating their own copy doesn't trigger any of the matching/notification logic.
+router.post('/survey-pdf', express.json({ limit: '1mb' }), async (req, res) => {
+  if (!verifyWebhookSecret(req)) {
+    return res.status(401).json({ error: 'invalid webhook secret' });
+  }
+
+  const submission = req.body || {};
+
+  try {
+    const pdfBuffer = await renderSurveyPdf(submission);
+    const filename = buildFilename(submission);
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(pdfBuffer);
+  } catch (err) {
+    console.error('[webhook] PDF download generation failed:', err);
+    return res.status(500).json({ error: 'pdf generation failed' });
+  }
+});
+
 // Body shape posted by webflow-quiz/spiritual-gifts-quiz.html's buildSurveyPayload():
 // { submittedAt, name, email, giftScores, topGifts, disc, mbti, topRoles, schedule,
 //   skills, faithStory, under18, dayJobSkill, volunteerExperience, pastorRequest, pastorNote }

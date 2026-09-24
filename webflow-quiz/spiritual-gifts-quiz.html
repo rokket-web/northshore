@@ -265,6 +265,7 @@ const S = {
   name: "",
   email: "",
   contactMeVolunteering: true,
+  downloadPdf: false,
   pastorRequest: false,
   pastorNote: "",
   dayJobSkill: "",
@@ -276,6 +277,7 @@ const S = {
 // (different origin from the backend), switch this to the full Render URL, e.g.
 // "https://northshore-survey-connector.onrender.com/webhook/survey"
 const SURVEY_BACKEND_URL = "/webhook/survey";
+const SURVEY_PDF_URL = "/webhook/survey-pdf";
 
 // Not a real secret (this file ships to the browser, so anyone can read it) — just a
 // lightweight filter so the backend can ignore stray/garbage POSTs. Set the same value
@@ -678,25 +680,34 @@ function renderPractical(){
 /* ===================== RENDER: RESULTS ===================== */
 function radarSvg(norm){
   const N = DATA.giftOrder.length;
-  const R = 120, cx = 150, cy = 150;
+  const R = 110, baseR = 18, cx = 250, cy = 250;
+  const labelR = baseR + R + 12;
   const pts = DATA.giftOrder.map((g, i) => {
     const angle = (Math.PI * 2 * i / N) - Math.PI/2;
-    const r = 18 + norm[g]*R;
+    const r = baseR + norm[g]*R;
     return [cx + r*Math.cos(angle), cy + r*Math.sin(angle)];
   });
   const poly = pts.map(p => p.join(',')).join(' ');
   const rings = [0.25,0.5,0.75,1].map(f => {
-    const rr = 18 + f*R;
+    const rr = baseR + f*R;
     return `<circle cx="${cx}" cy="${cy}" r="${rr}" fill="none" stroke="#DED7C6" stroke-width="1"/>`;
   }).join('');
   const spokes = DATA.giftOrder.map((g,i) => {
     const angle = (Math.PI*2*i/N) - Math.PI/2;
-    const x2 = cx + (18+R)*Math.cos(angle), y2 = cy + (18+R)*Math.sin(angle);
+    const x2 = cx + (baseR+R)*Math.cos(angle), y2 = cy + (baseR+R)*Math.sin(angle);
     return `<line x1="${cx}" y1="${cy}" x2="${x2}" y2="${y2}" stroke="#DED7C6" stroke-width="1"/>`;
   }).join('');
-  return `<svg viewBox="0 0 300 300" width="100%" style="max-width:320px;display:block;margin:0 auto">
+  const labels = DATA.giftOrder.map((g,i) => {
+    const angle = (Math.PI*2*i/N) - Math.PI/2;
+    const lx = cx + labelR*Math.cos(angle), ly = cy + labelR*Math.sin(angle);
+    const cosA = Math.cos(angle);
+    const anchor = cosA > 0.15 ? 'start' : (cosA < -0.15 ? 'end' : 'middle');
+    return `<text x="${lx}" y="${ly}" dy="0.35em" text-anchor="${anchor}" font-size="10" font-family="Montserrat, system-ui, sans-serif" fill="#373743">${g}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 500 500" width="100%" style="max-width:360px;display:block;margin:0 auto">
     ${rings}${spokes}
     <polygon points="${poly}" fill="#C1892E" fill-opacity="0.28" stroke="#96691E" stroke-width="2"/>
+    ${labels}
   </svg>`;
 }
 
@@ -756,6 +767,37 @@ async function submitToBackend(){
   } catch (err) {
     console.warn('[survey] backend submission failed:', err);
     return false;
+  }
+}
+
+// Triggers a browser download of the results PDF — independent of submitToBackend()
+// (doesn't touch PCO/SharePoint/email), so it can run alongside it without either one
+// blocking or depending on the other.
+async function downloadResultsPdf(){
+  try {
+    const headers = {'Content-Type': 'application/json'};
+    if (SURVEY_WEBHOOK_TOKEN) headers['x-webhook-secret'] = SURVEY_WEBHOOK_TOKEN;
+    const res = await fetch(SURVEY_PDF_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(buildSurveyPayload()),
+    });
+    if (!res.ok) {
+      console.warn('[survey] PDF download failed:', res.status, await res.text().catch(() => ''));
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const namePart = (S.name || 'My').trim().replace(/[^a-z0-9]+/gi, '_') || 'My';
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${namePart}_Assessment.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.warn('[survey] PDF download failed:', err);
   }
 }
 
@@ -838,6 +880,10 @@ function renderResults(){
     <h3>Your details</h3>
     <input type="text" id="nameInput2" placeholder="Your name" value="${S.name}">
     <input type="email" id="emailInput2" placeholder="Your email" value="${S.email}">
+    <div class="pair-opt ${S.downloadPdf ? 'sel' : ''}" id="downloadPdfCheck" style="margin-bottom:10px">
+      <input type="checkbox" id="downloadPdfCheckbox" ${S.downloadPdf ? 'checked' : ''} style="margin-right:8px;vertical-align:middle">
+      Download a PDF version of my results.
+    </div>
     <div class="pair-opt ${S.contactMeVolunteering ? 'sel' : ''}" id="volunteerContactCheck" style="margin-bottom:10px">
       <input type="checkbox" id="volunteerContactCheckbox" ${S.contactMeVolunteering ? 'checked' : ''} style="margin-right:8px;vertical-align:middle">
       Please contact me to connect me with one of these volunteer teams.
@@ -870,6 +916,16 @@ function renderResults(){
   document.getElementById('volExpInput').addEventListener('input', e => { S.volunteerExperience = e.target.value; });
   document.getElementById('nameInput2').addEventListener('input', e => { S.name = e.target.value; });
   document.getElementById('emailInput2').addEventListener('input', e => { S.email = e.target.value; });
+  document.getElementById('downloadPdfCheckbox').addEventListener('change', e => {
+    S.downloadPdf = e.target.checked;
+    renderResults();
+  });
+  document.getElementById('downloadPdfCheck').addEventListener('click', e => {
+    if (e.target.id === 'downloadPdfCheckbox') return;
+    const cb = document.getElementById('downloadPdfCheckbox');
+    cb.checked = !cb.checked;
+    cb.dispatchEvent(new Event('change'));
+  });
   document.getElementById('volunteerContactCheckbox').addEventListener('change', e => {
     S.contactMeVolunteering = e.target.checked;
     renderResults();
@@ -896,7 +952,7 @@ function renderResults(){
   document.getElementById('restartBtn').addEventListener('click', () => {
     S.step = 0; S.answers = {}; S.disc = {}; S.mbti = {};
     S.schedule = new Set(); S.skills = new Set(); S.faithStory = new Set();
-    S.under18 = null; S.contactMeVolunteering = true; S.pastorRequest = false; S.pastorNote = "";
+    S.under18 = null; S.contactMeVolunteering = true; S.downloadPdf = false; S.pastorRequest = false; S.pastorNote = "";
     S.dayJobSkill = ""; S.volunteerExperience = "";
     render();
     window.scrollTo({top:0, behavior:'smooth'});
@@ -912,6 +968,7 @@ function renderResults(){
     btn.disabled = true;
     btn.textContent = 'Completing…';
     status.textContent = '';
+    if (S.downloadPdf) downloadResultsPdf();
     const ok = await submitToBackend();
     if (ok) {
       btn.textContent = 'Profile Completed ✓';
