@@ -149,6 +149,31 @@ function drawGiftBadges(doc, gifts) {
   doc.x = doc.page.margins.left;
 }
 
+// One block per top gift: name (colored, matching its badge) then its definition —
+// same content as the web results screen shows under the radar, just laid out for print.
+function drawGiftDefinitions(doc, gifts, giftDefs) {
+  const left = doc.page.margins.left;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+  gifts.forEach((gift) => {
+    const def = giftDefs?.[gift];
+    if (!def) return;
+
+    doc.font(BODY_BOLD_FONT).fontSize(10);
+    const nameHeight = doc.heightOfString(gift, { width });
+    doc.font(BODY_FONT).fontSize(9.5);
+    const defHeight = doc.heightOfString(def, { width });
+    ensureSpace(doc, nameHeight + defHeight + 12);
+
+    doc.font(BODY_BOLD_FONT).fontSize(10).fillColor(GIFT_COLORS[gift] || COLORS.tealDeep)
+      .text(gift, left, doc.y, { width });
+    doc.font(BODY_FONT).fontSize(9.5).fillColor(COLORS.inkSoft)
+      .text(def, left, doc.y + 2, { width });
+    doc.moveDown(0.7);
+    doc.x = doc.page.margins.left;
+  });
+}
+
 function drawGiftScoreBars(doc, giftScores) {
   const entries = Object.entries(giftScores).sort((a, b) => b[1] - a[1]);
   const left = doc.page.margins.left;
@@ -286,7 +311,17 @@ function renderSurveyPdf(submission) {
       drawRadar(doc, submission.giftScores);
       if (Array.isArray(submission.topGifts) && submission.topGifts.length > 0) {
         drawGiftBadges(doc, submission.topGifts);
+        drawGiftDefinitions(doc, submission.topGifts, submission.giftDefs);
       }
+
+      // Always its own page — unconditional, not just "whenever it happens to fit" —
+      // so the full 16-gift score list always reads as its own section.
+      doc.addPage();
+      doc.x = doc.page.margins.left;
+      doc.font(HEADER_FONT).fontSize(11).fillColor(COLORS.inkSoft).text('Spiritual Gifts Continued');
+      doc.moveDown(0.5);
+      doc.x = doc.page.margins.left;
+
       drawGiftScoreBars(doc, submission.giftScores);
     }
 

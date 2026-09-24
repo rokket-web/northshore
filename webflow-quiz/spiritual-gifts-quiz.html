@@ -732,6 +732,10 @@ function buildSurveyPayload(){
       return acc;
     }, {}),
     topGifts: topGifts(norm, 5),
+    giftDefs: topGifts(norm, 5).reduce((acc, g) => {
+      acc[g] = DATA.giftDefs[g];
+      return acc;
+    }, {}),
     disc: {letter: disc.letter, counts: disc.counts, blurb: DATA.typeBlurbs[disc.letter]},
     mbti: {type: mtype},
     topRoles: matches.slice(0, 6).map(m => ({team: m.role.team, score: Math.round(m.score * 100), desc: m.role.desc})),
