@@ -74,6 +74,13 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
     return res.status(422).json({ error: 'submission is missing an email address, cannot match to a PCO profile' });
   }
 
+  // Declared here (not inside the try below) so the outer catch can still report
+  // a SharePoint/PCO-file failure even if something later in the pipeline throws.
+  let sharePointLink = null;
+  let sharePointError = null;
+  let pcoFileId = null;
+  let pcoFileError = null;
+
   try {
     const pdfBuffer = await renderSurveyPdf(submission);
     const filename = buildFilename(submission);
@@ -81,11 +88,11 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
     // SharePoint copy, for the shared-directory requirement — independent of PCO, and
     // not required for "Full Assessment" to work (that's the PCO file upload below).
     // Not fatal: a temporary Azure/SharePoint problem shouldn't block the rest.
-    let sharePointLink = null;
     try {
       const driveItem = await uploadSurveyPdf(filename, pdfBuffer);
       sharePointLink = await createSharingLink(driveItem.id);
     } catch (err) {
+      sharePointError = err.message;
       console.warn('[webhook] SharePoint upload failed — continuing without it:', err.message);
     }
 
@@ -98,7 +105,7 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
           : `Email matched ${match.candidates.length} different people, and the submitted name didn't narrow it to one.`;
       console.warn(`[webhook] ${reason} (${submission.email})`);
       await sendUnmatchedAlert(submission, reason, match.candidates, { filename, content: pdfBuffer });
-      activityLog.record({ name: submission.name, email: submission.email, status: match.status, detail: reason, filename, pdfLink: sharePointLink });
+      activityLog.record({ name: submission.name, email: submission.email, status: match.status, detail: reason, filename, pdfLink: sharePointLink, sharePointError });
       return res.status(202).json({ status: `pdf_saved_${match.status}_match`, filename, pdfLink: sharePointLink });
     }
 
@@ -108,10 +115,10 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
     // so it needs an actual PCO file id — uploaded via PCO's own file service, using the
     // same PCO credentials as everything else (no Azure/SharePoint involved). Not fatal:
     // the other fields below still get written even if this one upload fails.
-    let pcoFileId = null;
     try {
       pcoFileId = await uploadFile(pdfBuffer, filename, 'application/pdf');
     } catch (err) {
+      pcoFileError = err.message;
       console.warn('[webhook] PCO file upload failed — "Full Assessment" will be left blank:', err.message);
     }
 
@@ -176,7 +183,9 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
       topRoles: topRoleNames,
       filename,
       pdfLink: sharePointLink,
+      sharePointError,
       pcoFileAttached: Boolean(pcoFileId),
+      pcoFileError,
       missingFields,
     });
 
@@ -190,7 +199,16 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
     });
   } catch (err) {
     console.error('[webhook] survey processing failed:', err);
-    activityLog.record({ name: submission.name, email: submission.email, status: 'error', detail: err.message });
+    activityLog.record({
+      name: submission.name,
+      email: submission.email,
+      status: 'error',
+      detail: err.message,
+      pdfLink: sharePointLink,
+      sharePointError,
+      pcoFileAttached: Boolean(pcoFileId),
+      pcoFileError,
+    });
     return res.status(500).json({ error: 'processing failed' });
   }
 });
