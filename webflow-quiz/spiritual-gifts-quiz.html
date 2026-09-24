@@ -286,11 +286,11 @@ const SURVEY_WEBHOOK_TOKEN = "";
 
 // Category weights for role matching (must sum to 1)
 const WEIGHTS = {
-  skills: 0.325,
-  created: 0.275,
+  skills: 0.225,
+  created: 0.175,
   schedule: 0.25,
   faith: 0.05,
-  gifts: 0.10,
+  gifts: 0.30,
 };
 
 const GIFT_QS_PER_PAGE = 10;
@@ -488,7 +488,7 @@ function renderIntro(){
   app.innerHTML = `
   <p class="eyebrow">Serving with Northshore</p>
   <h1>Find where your gifts fit</h1>
-  <p>Take about 10&ndash;12 minutes to walk through a spiritual gifts survey, a quick personality snapshot, and a few practical questions. Then see the volunteer roles with Northshore that best fit how God has created you. Answer as honestly as you can. Your answers won't be shared, just your results if you choose.</p>
+  <p>Take about 10&ndash;12 minutes to walk through a spiritual gifts survey, a quick personality snapshot, and a few practical questions. I Then see the volunteer roles with Northshore that best fit how God has created you. Answer as honestly as you can. Your answers won't be shared, just your results if you choose.</p>
   <div class="card">
     <h3>What's inside</h3>
     <p class="small">1. Spiritual Gifts Survey (${DATA.questions.length} short statements)<br>
@@ -732,7 +732,7 @@ function buildSurveyPayload(){
       return acc;
     }, {}),
     topGifts: topGifts(norm, 5),
-    disc: {letter: disc.letter, counts: disc.counts},
+    disc: {letter: disc.letter, counts: disc.counts, blurb: DATA.typeBlurbs[disc.letter]},
     mbti: {type: mtype},
     topRoles: matches.slice(0, 6).map(m => ({team: m.role.team, score: Math.round(m.score * 100), desc: m.role.desc})),
     schedule: Array.from(S.schedule),

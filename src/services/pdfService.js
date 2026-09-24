@@ -178,7 +178,7 @@ function drawGiftScoreBars(doc, giftScores) {
   });
 }
 
-function drawTypeChip(doc, label, bgColor) {
+function drawTypeChip(doc, label, bgColor, description) {
   ensureSpace(doc, 40);
   doc.font(HEADER_FONT).fontSize(16);
   const paddingX = 16;
@@ -190,7 +190,19 @@ function drawTypeChip(doc, label, bgColor) {
   doc.roundedRect(x, y, boxWidth, boxHeight, 8).fill(bgColor);
   doc.fillColor('#FFFFFF').text(label, x + paddingX, y + 7, { lineBreak: false });
 
-  doc.y = y + boxHeight + 10;
+  doc.y = y + boxHeight + 8;
+  doc.x = doc.page.margins.left;
+
+  if (description) {
+    const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    doc.font(BODY_FONT).fontSize(10);
+    const descHeight = doc.heightOfString(description, { width });
+    ensureSpace(doc, descHeight + 14);
+    doc.fillColor(COLORS.inkSoft).text(description, doc.page.margins.left, doc.y, { width });
+    doc.moveDown(0.6);
+  } else {
+    doc.moveDown(0.3);
+  }
   doc.x = doc.page.margins.left;
 }
 
@@ -287,8 +299,15 @@ function renderSurveyPdf(submission) {
         doc.x = doc.page.margins.left;
       }
       drawSectionHeading(doc, 'Personality Snapshot');
-      if (submission.disc?.letter) drawTypeChip(doc, submission.disc.letter, COLORS.ink);
-      if (submission.mbti?.type) drawTypeChip(doc, submission.mbti.type, COLORS.tealDeep);
+      if (submission.disc?.letter) drawTypeChip(doc, submission.disc.letter, COLORS.ink, submission.disc.blurb);
+      if (submission.mbti?.type) {
+        drawTypeChip(
+          doc,
+          submission.mbti.type,
+          COLORS.tealDeep,
+          'This is a light-touch snapshot, not a clinical assessment — it’s here to help color which roles might energize you rather than drain you.'
+        );
+      }
     }
 
     if (Array.isArray(submission.topRoles) && submission.topRoles.length > 0) {
