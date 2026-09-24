@@ -1,26 +1,8 @@
 const express = require('express');
-const config = require('../config');
+const requireAdmin = require('../middleware/requireAdmin');
 const activityLog = require('../services/activityLog');
 
 const router = express.Router();
-
-// Shows submitter names/emails, so this is gated behind a password rather than left
-// open — refuses to serve at all if ADMIN_PASSWORD hasn't been set, rather than
-// silently exposing PII by default.
-function requireAdmin(req, res, next) {
-  if (!config.admin.password) {
-    return res.status(503).send('Set ADMIN_PASSWORD to enable this page.');
-  }
-
-  const [scheme, encoded] = (req.get('authorization') || '').split(' ');
-  if (scheme === 'Basic' && encoded) {
-    const [, password] = Buffer.from(encoded, 'base64').toString('utf8').split(':');
-    if (password === config.admin.password) return next();
-  }
-
-  res.set('WWW-Authenticate', 'Basic realm="Northshore Admin"');
-  return res.status(401).send('Authentication required.');
-}
 
 function escapeHtml(str) {
   return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
