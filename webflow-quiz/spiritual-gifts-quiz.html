@@ -103,6 +103,11 @@ p{margin:0 0 14px;color:var(--ink-soft)}
   border-color:var(--ink);
   color:#fff;
 }
+@media (max-width:520px){
+  .scale{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .scale label{grid-column:span 2;min-width:0}
+  .scale label:nth-of-type(3){grid-column:2 / span 2}
+}
 .pair{
   display:grid;
   grid-template-columns:1fr;
@@ -990,7 +995,7 @@ function renderResults(){
     } else {
       btn.disabled = false;
       btn.textContent = 'Complete My Profile →';
-      status.textContent = 'Something went wrong saving your profile. Please try again.';
+      status.textContent = 'Thank you for taking the time to complete the assessment.';
     }
   });
 }

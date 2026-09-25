@@ -1,18 +1,83 @@
+const nodemailer = require('nodemailer');
 const config = require('../config');
 const { getGraphClient } = require('./graphClient');
 const settingsStore = require('./settingsStore');
+const emailLog = require('./emailLog');
+
+let smtpTransport;
+function getSmtpTransport() {
+  if (!smtpTransport) {
+    const { host, port, user, pass } = config.mail.smtp;
+    smtpTransport = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465, // 587 upgrades to TLS via STARTTLS
+      auth: { user, pass },
+    });
+  }
+  return smtpTransport;
+}
+
+function smtpConfigured() {
+  return Boolean(config.mail.smtp.user && config.mail.smtp.pass);
+}
+
+function activeTransport() {
+  return smtpConfigured() ? 'brevo' : 'graph';
+}
+
+/**
+ * Sends mail via Brevo SMTP when BREVO_SMTP_KEY is set, otherwise via
+ * Microsoft Graph. The From address (MAIL_FROM) must be a sender verified in Brevo.
+ * Every attempt is recorded in the email log shown on /dashboard.
+ *
+ * @param {object} opts
+ * @param {string} [opts.kind] label for the email log, e.g. 'unmatched', 'completion', 'test'
+ * @param {{filename: string, contentType: string, content: Buffer}} [opts.attachment]
+ */
+async function sendMail({ to, subject, body, attachment, kind }) {
+  const transport = activeTransport();
+  if (!to) {
+    await emailLog.record({ kind, subject, transport, status: 'skipped', detail: 'No recipient address.' });
+    return;
+  }
+
+  try {
+    const info = transport === 'brevo'
+      ? await sendMailViaSmtp({ to, subject, body, attachment })
+      : await sendMailViaGraph({ to, subject, body, attachment });
+    await emailLog.record({
+      kind, to, subject, transport, status: 'sent',
+      detail: info?.messageId ? `Accepted by server, message id ${info.messageId}` : 'Accepted by server.',
+    });
+  } catch (err) {
+    await emailLog.record({ kind, to, subject, transport, status: 'failed', detail: err.message });
+    throw err;
+  }
+}
+
+async function sendMailViaSmtp({ to, subject, body, attachment }) {
+  if (!config.mail.from) {
+    throw new Error('MAIL_FROM is not configured — cannot send mail via Brevo.');
+  }
+  return getSmtpTransport().sendMail({
+    from: config.mail.from,
+    to,
+    subject,
+    text: body,
+    attachments: attachment
+      ? [{ filename: attachment.filename, contentType: attachment.contentType, content: attachment.content }]
+      : undefined,
+  });
+}
 
 /**
  * Sends mail via Microsoft Graph, from the mailbox configured as MAIL_SENDER_UPN.
  * Requires the app registration to have the application permission Mail.Send —
  * see README for the Exchange Application Access Policy needed to scope this to
  * one mailbox instead of every mailbox in the tenant.
- *
- * @param {object} opts
- * @param {{filename: string, contentType: string, content: Buffer}} [opts.attachment]
  */
-async function sendMail({ to, subject, body, attachment }) {
-  if (!to) return;
+async function sendMailViaGraph({ to, subject, body, attachment }) {
   if (!config.mail.senderUpn) {
     throw new Error('MAIL_SENDER_UPN is not configured — cannot send mail.');
   }
@@ -102,6 +167,7 @@ async function sendUnmatchedAlert(submission, reason, candidates = [], pdf) {
   const staffAlertEmail = (await settingsStore.load()).staffAlertEmail;
   if (!staffAlertEmail) {
     console.warn('[mail] No staff alert email set (STAFF_ALERT_EMAIL or /dashboard) — skipping unmatched-submission alert.');
+    await emailLog.record({ kind: 'unmatched', transport: activeTransport(), status: 'skipped', detail: 'No staff alert email set (STAFF_ALERT_EMAIL or /dashboard).' });
     return;
   }
 
@@ -123,6 +189,7 @@ async function sendUnmatchedAlert(submission, reason, candidates = [], pdf) {
   lines.push('', pdf ? 'The full results PDF is attached to this email.' : '(PDF attachment not available.)');
 
   await sendMail({
+    kind: 'unmatched',
     to: staffAlertEmail,
     subject: `Spiritual Gifts quiz: needs manual PCO match (${submission.name || submission.email || 'unknown'})`,
     body: lines.join('\n'),
@@ -139,6 +206,7 @@ async function sendCompletionAlert(submission, { person, pdfLink, topGifts, topR
   const settings = await settingsStore.load();
   if (!settings.staffAlertEmail) {
     console.warn('[mail] No staff alert email set (STAFF_ALERT_EMAIL or /dashboard) — skipping completion notification.');
+    await emailLog.record({ kind: 'completion', transport: activeTransport(), status: 'skipped', detail: 'No staff alert email set (STAFF_ALERT_EMAIL or /dashboard).' });
     return;
   }
 
@@ -182,7 +250,7 @@ async function sendCompletionAlert(submission, { person, pdfLink, topGifts, topR
     ? `Pastor follow-up requested: ${submission.name || submission.email}`
     : `Spiritual Gifts quiz completed: ${submission.name || submission.email}`;
 
-  await sendMail({ to: settings.staffAlertEmail, subject, body: lines.join('\n') });
+  await sendMail({ kind: 'completion', to: settings.staffAlertEmail, subject, body: lines.join('\n') });
 }
 
-module.exports = { sendMail, sendUnmatchedAlert, sendCompletionAlert };
+module.exports = { sendMail, activeTransport, sendUnmatchedAlert, sendCompletionAlert };

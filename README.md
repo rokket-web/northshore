@@ -146,6 +146,9 @@ This app writes to SharePoint via Microsoft Graph, authenticating as an app
      tenant. Scope it down with an
      [Exchange Application Access Policy](https://learn.microsoft.com/en-us/graph/auth-limit-mailbox-access)
      restricting it to just the mailbox you'll use as `MAIL_SENDER_UPN`.
+     Not needed if you send through Brevo instead: set `SMTP_USER`, `BREVO_SMTP_KEY`
+     (the Brevo SMTP key) and `MAIL_FROM` (a Brevo-verified sender), and all
+     staff emails go through `smtp-relay.brevo.com:587`.
 5. Click **Grant admin consent** for both permissions (requires a tenant admin).
 6. Find your target site's Graph site ID: `GET
    https://graph.microsoft.com/v1.0/sites/{hostname}:/sites/{site-path}` — the

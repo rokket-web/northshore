@@ -1,7 +1,9 @@
 const express = require('express');
 const requireAdmin = require('../middleware/requireAdmin');
 const settingsStore = require('../services/settingsStore');
-const { sendMail } = require('../services/mailService');
+const config = require('../config');
+const { sendMail, activeTransport } = require('../services/mailService');
+const emailLog = require('../services/emailLog');
 
 const router = express.Router();
 
@@ -9,7 +11,47 @@ function escapeHtml(str) {
   return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function renderPage(settings, banner) {
+// Shows which transport the running server will actually use and what's missing, since
+// "email didn't arrive" is usually a config problem, not a code one. Never shows secrets.
+function renderMailSetup(settings) {
+  const transport = activeTransport();
+  const rows = [
+    ['Sending through', transport === 'brevo' ? `Brevo SMTP (${config.mail.smtp.host}:${config.mail.smtp.port})` : 'Microsoft Graph (BREVO_SMTP_KEY not set)'],
+    ['From address', transport === 'brevo' ? (config.mail.from || 'NOT SET — add MAIL_FROM') : (config.mail.senderUpn || 'NOT SET — add MAIL_SENDER_UPN')],
+    ['Brevo SMTP key', config.mail.smtp.pass ? 'Set' : 'Not set'],
+    ['Alerts go to', settings.staffAlertEmail || 'NOT SET — add STAFF_ALERT_EMAIL or save one above'],
+  ];
+  return rows
+    .map(([k, v]) => `<div class="kv"><span>${escapeHtml(k)}</span><strong class="${/NOT SET|Not set/.test(v) ? 'bad' : ''}">${escapeHtml(v)}</strong></div>`)
+    .join('');
+}
+
+function renderEmailLog(entries, logError) {
+  if (logError) return `<p class="hint bad">Couldn't load the email log: ${escapeHtml(logError)}</p>`;
+  if (!entries.length) return '<p class="hint">No email attempts recorded yet.</p>';
+  return entries
+    .map((e) => `
+      <div class="log">
+        <div class="log-top">
+          <span class="pill ${escapeHtml(e.status)}">${escapeHtml(e.status)}</span>
+          <span>${escapeHtml(e.kind || 'email')} · ${escapeHtml(e.transport || '')}</span>
+          <time datetime="${escapeHtml(new Date(e.at).toISOString())}">${escapeHtml(new Date(e.at).toISOString().replace('T', ' ').slice(0, 19))} UTC</time>
+        </div>
+        <div class="log-sub">${escapeHtml(e.to_addr || '(no recipient)')}${e.subject ? ` — ${escapeHtml(e.subject)}` : ''}</div>
+        ${e.detail ? `<div class="log-detail">${escapeHtml(e.detail)}</div>` : ''}
+      </div>`)
+    .join('');
+}
+
+async function loadLog() {
+  try {
+    return { entries: await emailLog.getRecent(50), logError: null };
+  } catch (err) {
+    return { entries: [], logError: err.message };
+  }
+}
+
+function renderPage(settings, banner, { entries = [], logError = null } = {}) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -36,6 +78,22 @@ function renderPage(settings, banner) {
   .banner{padding:10px 14px;border-radius:8px;font-size:13.5px;margin-bottom:16px}
   .banner.ok{background:#E7F0E9;border:1px solid #9BC2A6;color:#2A5A38}
   .banner.error{background:#FBEAE6;border:1px solid #E0A98F;color:#8A3A20}
+  h2{font-size:15px;margin:24px 0 10px}
+  .kv{display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:6px 0;border-top:1px solid var(--line)}
+  .kv:first-child{border-top:none}
+  .kv span{color:var(--ink-soft)}
+  .kv strong{text-align:right;word-break:break-word}
+  .bad{color:#8A3A20}
+  .log{padding:10px 0;border-top:1px solid var(--line);font-size:13px}
+  .log:first-child{border-top:none;padding-top:0}
+  .log-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .log-top time{margin-left:auto;color:var(--ink-soft);font-size:12px}
+  .log-sub{margin-top:4px;word-break:break-word}
+  .log-detail{margin-top:4px;font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--ink-soft);word-break:break-word}
+  .pill{font-size:11px;font-weight:700;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:var(--paper)}
+  .pill.sent{background:#E7F0E9;color:#2A5A38}
+  .pill.failed{background:#FBEAE6;color:#8A3A20}
+  .pill.skipped{background:#F6EFD9;color:#7A5B12}
 </style>
 </head>
 <body>
@@ -62,14 +120,26 @@ function renderPage(settings, banner) {
       <button type="submit" formaction="/dashboard/test-email" class="secondary">Send Test Email</button>
     </div>
   </form>
+
+  <h2>Mail setup</h2>
+  <div class="card">${renderMailSetup(settings)}</div>
+
+  <h2>Email log <span style="font-weight:400;color:var(--ink-soft);font-size:12px">(last 50 attempts)</span></h2>
+  <div class="card">${renderEmailLog(entries, logError)}</div>
 </div>
+<script>
+  // Show log times in the viewer's own timezone (server renders UTC).
+  document.querySelectorAll('time[datetime]').forEach((t) => {
+    t.textContent = new Date(t.getAttribute('datetime')).toLocaleString();
+  });
+</script>
 </body>
 </html>`;
 }
 
 router.get('/', requireAdmin, async (req, res) => {
   try {
-    res.type('html').send(renderPage(await settingsStore.load(), null));
+    res.type('html').send(renderPage(await settingsStore.load(), null, await loadLog()));
   } catch (err) {
     console.error('[dashboard] failed to load settings:', err);
     res.status(500).send('Failed to load settings — check server logs.');
@@ -83,10 +153,10 @@ router.post('/', requireAdmin, express.urlencoded({ extended: false }), async (r
   };
   try {
     const settings = await settingsStore.save(submitted);
-    res.type('html').send(renderPage(settings, { ok: true, message: 'Saved.' }));
+    res.type('html').send(renderPage(settings, { ok: true, message: 'Saved.' }, await loadLog()));
   } catch (err) {
     console.error('[dashboard] failed to save settings:', err);
-    res.type('html').send(renderPage(submitted, { ok: false, message: `Failed to save: ${err.message}` }));
+    res.type('html').send(renderPage(submitted, { ok: false, message: `Failed to save: ${err.message}` }, await loadLog()));
   }
 });
 
@@ -98,11 +168,12 @@ router.post('/test-email', requireAdmin, express.urlencoded({ extended: false })
   const submitted = { staffAlertEmail: to, completionEmailNote: note };
 
   if (!to) {
-    return res.type('html').send(renderPage(submitted, { ok: false, message: 'Enter an email address first.' }));
+    return res.type('html').send(renderPage(submitted, { ok: false, message: 'Enter an email address first.' }, await loadLog()));
   }
 
   try {
     await sendMail({
+      kind: 'test',
       to,
       subject: 'Test email from Northshore admin dashboard',
       body: [
@@ -111,10 +182,10 @@ router.post('/test-email', requireAdmin, express.urlencoded({ extended: false })
         note ? `Custom note preview:\n${note}` : '(No custom note currently entered.)',
       ].join('\n'),
     });
-    res.type('html').send(renderPage(submitted, { ok: true, message: `Test email sent to ${to}.` }));
+    res.type('html').send(renderPage(submitted, { ok: true, message: `Test email sent to ${to} via ${activeTransport() === 'brevo' ? 'Brevo' : 'Microsoft Graph'}.` }, await loadLog()));
   } catch (err) {
     console.error('[dashboard] test email failed:', err);
-    res.type('html').send(renderPage(submitted, { ok: false, message: `Failed to send: ${err.message}` }));
+    res.type('html').send(renderPage(submitted, { ok: false, message: `Failed to send: ${err.message}` }, await loadLog()));
   }
 });
 

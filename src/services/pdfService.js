@@ -393,6 +393,10 @@ function renderSurveyPdf(submission) {
         .text(submission.pastorNote || '(no additional note provided)');
     }
 
+    drawSectionHeading(doc, 'Contact about joining a team');
+    doc.font(BODY_FONT).fontSize(10.5).fillColor(COLORS.ink)
+      .text(submission.contactMeVolunteering ? 'Yes' : 'No');
+
     doc.end();
   });
 }

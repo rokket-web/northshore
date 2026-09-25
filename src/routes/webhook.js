@@ -80,10 +80,13 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
   let sharePointError = null;
   let pcoFileId = null;
   let pcoFileError = null;
+  let pdfBuffer = null;
+  let filename = null;
+  let alertSent = false;
 
   try {
-    const pdfBuffer = await renderSurveyPdf(submission);
-    const filename = buildFilename(submission);
+    pdfBuffer = await renderSurveyPdf(submission);
+    filename = buildFilename(submission);
 
     // SharePoint copy, for the shared-directory requirement — independent of PCO, and
     // not required for "Full Assessment" to work (that's the PCO file upload below).
@@ -104,7 +107,14 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
           ? 'No PCO person found with this email address.'
           : `Email matched ${match.candidates.length} different people, and the submitted name didn't narrow it to one.`;
       console.warn(`[webhook] ${reason} (${submission.email})`);
-      await sendUnmatchedAlert(submission, reason, match.candidates, { filename, content: pdfBuffer });
+      // The alert is how staff find out about this person at all — but a mail failure
+      // shouldn't show the visitor an error for a submission we've already captured.
+      try {
+        await sendUnmatchedAlert(submission, reason, match.candidates, { filename, content: pdfBuffer });
+        alertSent = true;
+      } catch (err) {
+        console.error('[webhook] unmatched alert email failed:', err);
+      }
       activityLog.record({ name: submission.name, email: submission.email, status: match.status, detail: reason, filename, pdfLink: sharePointLink, sharePointError });
       return res.status(202).json({ status: `pdf_saved_${match.status}_match`, filename, pdfLink: sharePointLink });
     }
@@ -199,6 +209,20 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
     });
   } catch (err) {
     console.error('[webhook] survey processing failed:', err);
+    // Still get the results to staff (with the PDF, if it rendered) so a PCO/SharePoint
+    // outage doesn't lose the submission.
+    if (!alertSent) {
+      try {
+        await sendUnmatchedAlert(
+          submission,
+          `Processing failed before the PCO profile could be updated: ${err.message}`,
+          [],
+          pdfBuffer ? { filename, content: pdfBuffer } : undefined
+        );
+      } catch (mailErr) {
+        console.error('[webhook] fallback alert email failed:', mailErr);
+      }
+    }
     activityLog.record({
       name: submission.name,
       email: submission.email,

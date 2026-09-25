@@ -38,6 +38,14 @@ module.exports = {
   mail: {
     senderUpn: process.env.MAIL_SENDER_UPN || '',
     staffAlertEmail: process.env.STAFF_ALERT_EMAIL || '',
+    // Brevo SMTP relay — when BREVO_SMTP_KEY is set, mail goes out this way instead of Graph.
+    smtp: {
+      host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
+      port: Number(process.env.SMTP_PORT) || 587,
+      user: process.env.SMTP_USER || 'bb21fc001@smtp-brevo.com',
+      pass: process.env.BREVO_SMTP_KEY || '',
+    },
+    from: process.env.MAIL_FROM || process.env.MAIL_SENDER_UPN || '',
   },
 
   admin: {

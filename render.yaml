@@ -22,3 +22,9 @@ services:
         sync: false
       - key: PCO_SECRET
         sync: false
+      - key: SMTP_USER
+        value: bb21fc001@smtp-brevo.com
+      - key: BREVO_SMTP_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
