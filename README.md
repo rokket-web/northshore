@@ -7,7 +7,9 @@ entirely in the visitor's browser; when a visitor clicks "Complete My Profile" o
 results screen, it POSTs their results to this app, which renders a PDF, saves it to
 SharePoint, and updates the matching Planning Center Online (PCO) person profile.
 `GET /recent` and `GET /submissions` (both password-protected via `ADMIN_PASSWORD`) show
-recent submissions — see "Recent activity log" below.
+recent submissions — see "Recent activity log" below. `GET /dashboard` (same password)
+lets you change the staff notification email and completion-email note without a
+redeploy — see "Admin dashboard" below.
 
 ## Flow
 
@@ -67,6 +69,25 @@ Two things to know about both:
   the last few submissions work," not a durable audit trail — if you need real history
   later, that's a bigger change (a database or writing each event somewhere
   persistent), let me know if that becomes worth doing.
+
+## Admin dashboard
+
+`GET /dashboard` (same `ADMIN_PASSWORD` as above) lets you change two things without a
+code change or redeploy:
+
+- **Staff notification email** — overrides `STAFF_ALERT_EMAIL` for both the completion
+  and "needs manual PCO match" alert emails. Leave blank to fall back to the env var.
+- **Custom note on completion emails** — optional text shown near the top of every
+  "quiz completed" email (not the "needs manual PCO match" one, which stays focused on
+  the technical details needed to fix it).
+
+These are saved to `data/settings.json` (`src/services/settingsStore.js`), which is
+git-ignored. Same caveat as the activity log: this survives idle-sleep/wake, but **a
+fresh code deploy resets it back to the env var defaults** — Render rebuilds the
+container from the repo each time, so anything written to local disk since the last
+deploy doesn't carry over. Just re-enter it via `/dashboard` after deploying if that
+happens. If this becomes something you rely on day-to-day, moving it to a real
+persistent store is the next step — let me know if that's worth doing.
 
 ## Setup
 

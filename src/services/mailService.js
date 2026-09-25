@@ -1,5 +1,6 @@
 const config = require('../config');
 const { getGraphClient } = require('./graphClient');
+const settingsStore = require('./settingsStore');
 
 /**
  * Sends mail via Microsoft Graph, from the mailbox configured as MAIL_SENDER_UPN.
@@ -95,8 +96,9 @@ function formatFullResults(submission) {
  * @param {{filename: string, content: Buffer}} [pdf]
  */
 async function sendUnmatchedAlert(submission, reason, candidates = [], pdf) {
-  if (!config.mail.staffAlertEmail) {
-    console.warn('[mail] STAFF_ALERT_EMAIL not set — skipping unmatched-submission alert.');
+  const staffAlertEmail = settingsStore.load().staffAlertEmail;
+  if (!staffAlertEmail) {
+    console.warn('[mail] No staff alert email set (STAFF_ALERT_EMAIL or /dashboard) — skipping unmatched-submission alert.');
     return;
   }
 
@@ -118,7 +120,7 @@ async function sendUnmatchedAlert(submission, reason, candidates = [], pdf) {
   lines.push('', pdf ? 'The full results PDF is attached to this email.' : '(PDF attachment not available.)');
 
   await sendMail({
-    to: config.mail.staffAlertEmail,
+    to: staffAlertEmail,
     subject: `Spiritual Gifts quiz: needs manual PCO match (${submission.name || submission.email || 'unknown'})`,
     body: lines.join('\n'),
     attachment: pdf ? { filename: pdf.filename, contentType: 'application/pdf', content: pdf.content } : undefined,
@@ -131,8 +133,9 @@ async function sendUnmatchedAlert(submission, reason, candidates = [], pdf) {
  * staff see every completion rather than only the ones that needed manual review.
  */
 async function sendCompletionAlert(submission, { person, pdfLink, topGifts, topRoles, dayJob, volunteerExperience }) {
-  if (!config.mail.staffAlertEmail) {
-    console.warn('[mail] STAFF_ALERT_EMAIL not set — skipping completion notification.');
+  const settings = settingsStore.load();
+  if (!settings.staffAlertEmail) {
+    console.warn('[mail] No staff alert email set (STAFF_ALERT_EMAIL or /dashboard) — skipping completion notification.');
     return;
   }
 
@@ -142,12 +145,19 @@ async function sendCompletionAlert(submission, { person, pdfLink, topGifts, topR
     pastorRequest
       ? `${submission.name || 'Someone'} completed the Spiritual Gifts & Volunteer Match quiz and asked to talk something through with a pastor.`
       : `${submission.name || 'Someone'} completed the Spiritual Gifts & Volunteer Match quiz — their Planning Center profile has been updated.`,
+  ];
+
+  if (settings.completionEmailNote) {
+    lines.push('', settings.completionEmailNote);
+  }
+
+  lines.push(
     ``,
     `Name: ${submission.name || '(not given)'}`,
     `Email: ${submission.email}`,
     `PCO person id: ${person.id}`,
-    `Submitted at: ${submission.submittedAt || '(unknown)'}`,
-  ];
+    `Submitted at: ${submission.submittedAt || '(unknown)'}`
+  );
 
   if (pastorRequest) {
     lines.push(
@@ -169,7 +179,7 @@ async function sendCompletionAlert(submission, { person, pdfLink, topGifts, topR
     ? `Pastor follow-up requested: ${submission.name || submission.email}`
     : `Spiritual Gifts quiz completed: ${submission.name || submission.email}`;
 
-  await sendMail({ to: config.mail.staffAlertEmail, subject, body: lines.join('\n') });
+  await sendMail({ to: settings.staffAlertEmail, subject, body: lines.join('\n') });
 }
 
 module.exports = { sendMail, sendUnmatchedAlert, sendCompletionAlert };

@@ -5,6 +5,7 @@ const config = require('./config');
 const webhookRouter = require('./routes/webhook');
 const recentRouter = require('./routes/recent');
 const submissionsRouter = require('./routes/submissions');
+const dashboardRouter = require('./routes/dashboard');
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/webhook', webhookRouter);
 app.use('/recent', recentRouter);
 app.use('/submissions', submissionsRouter);
+app.use('/dashboard', dashboardRouter);
 
 app.listen(config.port, () => {
   console.log(`northshore-survey-connector listening on port ${config.port}`);
