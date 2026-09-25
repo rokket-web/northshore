@@ -231,6 +231,32 @@ function drawTypeChip(doc, label, bgColor, description) {
   doc.x = doc.page.margins.left;
 }
 
+// Uses real clickable link annotations (not just plain text mentioning the URLs) —
+// drawTypeChip's plain description doesn't support that, so this is its own block,
+// rendered once after both chips rather than duplicated under each one.
+function drawPersonalitySnapshotDisclaimer(doc) {
+  const left = doc.page.margins.left;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const intro =
+    'This is a light-touch snapshot, not a clinical assessment — it’s here to help color which roles might energize you rather than drain you. This is a non-scientific sample that represents larger tests called DISC and Myers-Briggs; we encourage you to find out more about how you’re created. You can find out more at discprofile.com or mbtionline.com respectively.';
+
+  doc.font(BODY_FONT).fontSize(10);
+  ensureSpace(doc, doc.heightOfString(intro, { width }) + 14);
+
+  doc.x = left;
+  doc.fillColor(COLORS.inkSoft).text(
+    'This is a light-touch snapshot, not a clinical assessment — it’s here to help color which roles might energize you rather than drain you. This is a non-scientific sample that represents larger tests called DISC and Myers-Briggs; we encourage you to find out more about how you’re created. You can find out more at ',
+    { width, continued: true }
+  );
+  doc.fillColor(COLORS.tealDeep).text('discprofile.com', { link: 'https://www.discprofile.com', underline: true, continued: true });
+  doc.fillColor(COLORS.inkSoft).text(' or ', { continued: true });
+  doc.fillColor(COLORS.tealDeep).text('mbtionline.com', { link: 'https://www.mbtionline.com', underline: true, continued: true });
+  doc.fillColor(COLORS.inkSoft).text(' respectively.');
+
+  doc.moveDown(0.6);
+  doc.x = left;
+}
+
 function drawRoleCard(doc, role, rank) {
   const left = doc.page.margins.left;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
@@ -335,14 +361,8 @@ function renderSurveyPdf(submission) {
       }
       drawSectionHeading(doc, 'Personality Snapshot');
       if (submission.disc?.letter) drawTypeChip(doc, submission.disc.letter, COLORS.ink, submission.disc.blurb);
-      if (submission.mbti?.type) {
-        drawTypeChip(
-          doc,
-          submission.mbti.type,
-          COLORS.tealDeep,
-          'This is a light-touch snapshot, not a clinical assessment — it’s here to help color which roles might energize you rather than drain you.'
-        );
-      }
+      if (submission.mbti?.type) drawTypeChip(doc, submission.mbti.type, COLORS.tealDeep);
+      drawPersonalitySnapshotDisclaimer(doc);
     }
 
     if (Array.isArray(submission.topRoles) && submission.topRoles.length > 0) {
