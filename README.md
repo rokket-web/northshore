@@ -81,13 +81,17 @@ code change or redeploy:
   "quiz completed" email (not the "needs manual PCO match" one, which stays focused on
   the technical details needed to fix it).
 
-These are saved to `data/settings.json` (`src/services/settingsStore.js`), which is
-git-ignored. Same caveat as the activity log: this survives idle-sleep/wake, but **a
-fresh code deploy resets it back to the env var defaults** — Render rebuilds the
-container from the repo each time, so anything written to local disk since the last
-deploy doesn't carry over. Just re-enter it via `/dashboard` after deploying if that
-happens. If this becomes something you rely on day-to-day, moving it to a real
-persistent store is the next step — let me know if that's worth doing.
+A **"Send Test Email"** button sends a real test email using whatever's currently typed
+in those two fields — whether or not you've clicked "Save Settings" yet — so you can
+check wording and deliverability before committing to it.
+
+These are stored in Postgres (`src/services/settingsStore.js`, table auto-created on
+first use), via a free [Neon](https://neon.com) database — set once, they stay set
+across deploys, unlike the in-memory activity log below. Requires `DATABASE_URL` to be
+set (see `.env.example`); locally this project is linked to a Neon project via the
+`neon` CLI, which keeps `.env.local` (git-ignored) filled in automatically. On Render,
+set `DATABASE_URL` as a real env var — get the connection string via `npx neon@latest
+connection-string` or the Neon console.
 
 ## Setup
 

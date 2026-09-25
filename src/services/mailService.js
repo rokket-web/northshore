@@ -12,7 +12,10 @@ const settingsStore = require('./settingsStore');
  * @param {{filename: string, contentType: string, content: Buffer}} [opts.attachment]
  */
 async function sendMail({ to, subject, body, attachment }) {
-  if (!config.mail.senderUpn || !to) return;
+  if (!to) return;
+  if (!config.mail.senderUpn) {
+    throw new Error('MAIL_SENDER_UPN is not configured — cannot send mail.');
+  }
 
   const message = {
     subject,
@@ -96,7 +99,7 @@ function formatFullResults(submission) {
  * @param {{filename: string, content: Buffer}} [pdf]
  */
 async function sendUnmatchedAlert(submission, reason, candidates = [], pdf) {
-  const staffAlertEmail = settingsStore.load().staffAlertEmail;
+  const staffAlertEmail = (await settingsStore.load()).staffAlertEmail;
   if (!staffAlertEmail) {
     console.warn('[mail] No staff alert email set (STAFF_ALERT_EMAIL or /dashboard) — skipping unmatched-submission alert.');
     return;
@@ -133,7 +136,7 @@ async function sendUnmatchedAlert(submission, reason, candidates = [], pdf) {
  * staff see every completion rather than only the ones that needed manual review.
  */
 async function sendCompletionAlert(submission, { person, pdfLink, topGifts, topRoles, dayJob, volunteerExperience }) {
-  const settings = settingsStore.load();
+  const settings = await settingsStore.load();
   if (!settings.staffAlertEmail) {
     console.warn('[mail] No staff alert email set (STAFF_ALERT_EMAIL or /dashboard) — skipping completion notification.');
     return;

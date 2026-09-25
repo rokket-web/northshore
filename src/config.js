@@ -1,4 +1,8 @@
 require('dotenv').config();
+// .env.local holds the DATABASE_URL the Neon CLI pulled down locally (git-ignored,
+// not present on Render — there it's a real env var set directly in the dashboard).
+// Loaded second so it only fills in anything .env didn't already set.
+require('dotenv').config({ path: '.env.local' });
 
 function required(name) {
   const value = process.env[name];
@@ -39,4 +43,6 @@ module.exports = {
   admin: {
     password: process.env.ADMIN_PASSWORD || '',
   },
+
+  databaseUrl: process.env.DATABASE_URL || '',
 };
