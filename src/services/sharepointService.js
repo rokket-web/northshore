@@ -38,4 +38,25 @@ async function createSharingLink(itemId) {
   return result.link.webUrl;
 }
 
-module.exports = { uploadSurveyPdf, createSharingLink };
+/**
+ * Checks the Azure credentials and SharePoint permissions end to end: reads the site,
+ * then writes and deletes a small test file in the configured folder (the same write
+ * access real uploads need).
+ *
+ * @returns {Promise<{siteName: string, siteUrl: string, folder: string}>}
+ */
+async function testConnection() {
+  const client = getGraphClient();
+  const site = await client.api(`/sites/${config.sharepoint.siteId}`).select('displayName,webUrl').get();
+
+  const folderPath = config.sharepoint.drivePath.replace(/^\/+|\/+$/g, '');
+  const itemPath = folderPath ? `${folderPath}/_connection-test.txt` : '_connection-test.txt';
+  const item = await client
+    .api(`/sites/${config.sharepoint.siteId}/drive/root:/${encodeURI(itemPath)}:/content`)
+    .put(Buffer.from(`Connection test from Northshore admin dashboard at ${new Date().toISOString()}\n`));
+  await client.api(`/sites/${config.sharepoint.siteId}/drive/items/${item.id}`).delete();
+
+  return { siteName: site.displayName, siteUrl: site.webUrl, folder: folderPath || '(library root)' };
+}
+
+module.exports = { uploadSurveyPdf, createSharingLink, testConnection };

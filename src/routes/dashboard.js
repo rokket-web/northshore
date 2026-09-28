@@ -4,6 +4,7 @@ const settingsStore = require('../services/settingsStore');
 const config = require('../config');
 const { sendMail, activeTransport } = require('../services/mailService');
 const emailLog = require('../services/emailLog');
+const { testConnection: testSharePoint } = require('../services/sharepointService');
 
 const router = express.Router();
 
@@ -124,6 +125,12 @@ function renderPage(settings, banner, { entries = [], logError = null } = {}) {
   <h2>Mail setup</h2>
   <div class="card">${renderMailSetup(settings)}</div>
 
+  <h2>SharePoint</h2>
+  <form method="POST" action="/dashboard/test-sharepoint" class="card">
+    <p class="hint" style="margin:0 0 8px">Signs in with the Azure app, then saves and deletes a small test file in the "${escapeHtml(config.sharepoint.drivePath)}" folder — the same access survey PDF uploads need.</p>
+    <button type="submit" class="secondary">Test SharePoint Connection</button>
+  </form>
+
   <h2>Email log <span style="font-weight:400;color:var(--ink-soft);font-size:12px">(last 50 attempts)</span></h2>
   <div class="card">${renderEmailLog(entries, logError)}</div>
 </div>
@@ -186,6 +193,18 @@ router.post('/test-email', requireAdmin, express.urlencoded({ extended: false })
   } catch (err) {
     console.error('[dashboard] test email failed:', err);
     res.type('html').send(renderPage(submitted, { ok: false, message: `Failed to send: ${err.message}` }, await loadLog()));
+  }
+});
+
+router.post('/test-sharepoint', requireAdmin, async (req, res) => {
+  const settings = await settingsStore.load().catch(() => ({ staffAlertEmail: '', completionEmailNote: '' }));
+  try {
+    const { siteName, siteUrl, folder } = await testSharePoint();
+    res.type('html').send(renderPage(settings, { ok: true, message: `SharePoint connected: wrote and removed a test file in "${folder}" on ${siteName} (${siteUrl}).` }, await loadLog()));
+  } catch (err) {
+    console.error('[dashboard] SharePoint test failed:', err);
+    const detail = err.statusCode ? `Graph ${err.statusCode}${err.code ? ` ${err.code}` : ''}: ${err.message}` : err.message;
+    res.type('html').send(renderPage(settings, { ok: false, message: `SharePoint test failed — ${detail}` }, await loadLog()));
   }
 });
 
