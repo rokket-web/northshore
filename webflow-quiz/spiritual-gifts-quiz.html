@@ -856,7 +856,6 @@ function renderResults(){
 
   const roleCards = top.map((m, i) => {
     const r = m.role;
-    const pct = Math.round(m.score * 100);
     const tags = [
       ...r.gifts.map(g => `<span class="tag ${m.matched.gifts.includes(g)?'match':''}">${g}</span>`),
       ...r.skills.map(s => `<span class="tag ${m.matched.skills.includes(s)?'match':''}">${s}</span>`),
@@ -865,7 +864,6 @@ function renderResults(){
     return `
     <div class="role-card">
       <div class="role-rank">#${i+1} match</div>
-      <div class="match-pct">${pct}%</div>
       <div class="role-title">${r.team}</div>
       <div class="role-desc">${r.desc}</div>
       <div class="tag-row">${tags || '<span class="tag">General role</span>'}</div>
