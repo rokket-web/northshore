@@ -112,11 +112,16 @@ function formatFullResults(submission) {
   const lines = [];
 
   if (submission.topGifts?.length) {
-    lines.push('', 'Top spiritual gifts:');
-    submission.topGifts.forEach((gift) => {
+    lines.push('', 'Top 5 spiritual gifts:');
+    submission.topGifts.slice(0, 5).forEach((gift) => {
       const pct = submission.giftScores?.[gift];
       lines.push(`- ${gift}${pct !== undefined ? ` (${pct}%)` : ''}`);
     });
+  }
+
+  if (submission.topRoles?.length) {
+    lines.push('', 'Top 5 volunteer jobs:');
+    submission.topRoles.slice(0, 5).forEach((r) => lines.push(`- ${r.team}${r.desc ? ` — ${r.desc}` : ''}`));
   }
 
   if (submission.giftScores && Object.keys(submission.giftScores).length > 0) {
@@ -130,11 +135,6 @@ function formatFullResults(submission) {
     lines.push('', 'Personality snapshot:');
     if (submission.disc?.letter) lines.push(`- DISC style: ${submission.disc.letter}`);
     if (submission.mbti?.type) lines.push(`- MBTI type: ${submission.mbti.type}`);
-  }
-
-  if (submission.topRoles?.length) {
-    lines.push('', 'Top volunteer matches:');
-    submission.topRoles.forEach((r) => lines.push(`- ${r.team} (${r.score}%)${r.desc ? ` — ${r.desc}` : ''}`));
   }
 
   if (submission.schedule?.length) lines.push('', `Availability: ${submission.schedule.join(', ')}`);

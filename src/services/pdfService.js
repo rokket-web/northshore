@@ -263,7 +263,7 @@ function drawRoleCard(doc, role, rank) {
   const paddingX = 14;
   const paddingY = 12;
   const contentWidth = width - paddingX * 2;
-  const titleWidth = contentWidth - 60;
+  const titleWidth = contentWidth;
 
   doc.font(HEADER_FONT).fontSize(13);
   const titleHeight = doc.heightOfString(role.team, { width: titleWidth });
@@ -278,11 +278,6 @@ function drawRoleCard(doc, role, rank) {
 
   doc.font(BODY_BOLD_FONT).fontSize(8.5).fillColor(COLORS.goldDeep)
     .text(`MATCH #${rank}`, left + paddingX, y + paddingY, { lineBreak: false, characterSpacing: 0.5 });
-
-  const scoreLabel = `${role.score}%`;
-  doc.font(HEADER_FONT).fontSize(15).fillColor(COLORS.goldDeep);
-  const scoreWidth = doc.widthOfString(scoreLabel);
-  doc.text(scoreLabel, left + width - paddingX - scoreWidth, y + paddingY - 3, { lineBreak: false });
 
   doc.font(HEADER_FONT).fontSize(13).fillColor(COLORS.ink)
     .text(role.team, left + paddingX, y + paddingY + 16, { width: titleWidth });
@@ -361,12 +356,12 @@ function renderSurveyPdf(submission) {
       }
       drawSectionHeading(doc, 'Personality Snapshot');
       if (submission.disc?.letter) drawTypeChip(doc, submission.disc.letter, COLORS.ink, submission.disc.blurb);
-      if (submission.mbti?.type) drawTypeChip(doc, submission.mbti.type, COLORS.tealDeep);
+      if (submission.mbti?.type) drawTypeChip(doc, submission.mbti.type, COLORS.tealDeep, submission.mbti.blurb);
       drawPersonalitySnapshotDisclaimer(doc);
     }
 
     if (Array.isArray(submission.topRoles) && submission.topRoles.length > 0) {
-      drawSectionHeading(doc, 'Roles That Fit You Well');
+      drawSectionHeading(doc, 'Current Needs that Could Fit You Well:');
       submission.topRoles.slice(0, 6).forEach((role, i) => drawRoleCard(doc, role, i + 1));
     }
 
@@ -389,6 +384,7 @@ function renderSurveyPdf(submission) {
 
     if (submission.pastorRequest) {
       drawSectionHeading(doc, 'Pastor Follow-up Requested');
+      drawLabeledLine(doc, 'I want to talk to a Pastor', 'Yes');
       doc.font(BODY_FONT).fontSize(10.5).fillColor(COLORS.ink)
         .text(submission.pastorNote || '(no additional note provided)');
     }

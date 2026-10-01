@@ -163,7 +163,7 @@ This app writes to SharePoint via Microsoft Graph, authenticating as an app
    Gifts"** tab (create it via **Add tab** if it doesn't exist yet) — this is
    what makes the results show up together under their own tab on a person's
    profile, instead of scattered into whatever tab happens to be first. It
-   should contain 14 fields, one per row on the profile rather than one
+   should contain 15 fields, one per row on the profile rather than one
    combined field per category:
    - **"Spiritual Gift1"** through **"Spiritual Gift5"** (no space, no `#`)
    - **"Volunteer Job1"** through **"Volunteer Job5"**
@@ -174,6 +174,8 @@ This app writes to SharePoint via Microsoft Graph, authenticating as an app
      these volunteer teams" box is checked (it's checked by default);
      left untouched when unchecked, so an unchecked resubmission doesn't
      erase a "Yes" from an earlier one.
+   - **"I want to talk to a Pastor"** — type **Checkbox**. Written as `"Yes"`
+     when the quiz's pastor-follow-up box is checked; left untouched otherwise.
    - **"Full Assessment"** — type **File**. The PDF itself is uploaded
      through PCO's own file-upload API (`upload.planningcenteronline.com`,
      same PCO credentials as everything else) and attached as this field's
@@ -183,7 +185,7 @@ This app writes to SharePoint via Microsoft Graph, authenticating as an app
      the SharePoint upload is otherwise fully independent of this field.)
 
    Field type (Text, Text Area, Dropdown, Checkbox, etc.) doesn't matter to
-   the write for the 13 non-file fields — the app always POSTs a plain
+   the write for the 14 non-file fields — the app always POSTs a plain
    value through the API, the same as typing into a Text field. If a field
    is a Dropdown/Checkbox and the value doesn't match an existing option
    yet, PCO's API automatically adds it as a new option — no manual setup

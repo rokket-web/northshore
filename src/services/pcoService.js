@@ -130,6 +130,7 @@ const SINGLE_FIELD_NAMES = {
   dayJob: 'Day Job',
   volunteerExperience: 'Volunteer Experience',
   contactMeVolunteering: 'Contact Me about Volunteering',
+  pastorRequest: 'I want to talk to a Pastor',
   pdfLink: 'Full Assessment',
 };
 

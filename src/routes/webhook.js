@@ -74,6 +74,11 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
     return res.status(422).json({ error: 'submission is missing an email address, cannot match to a PCO profile' });
   }
 
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(submission.email).trim())) {
+    activityLog.record({ name: submission.name, email: submission.email, status: 'rejected', detail: 'invalid email format' });
+    return res.status(422).json({ error: 'submission email is not a valid email address' });
+  }
+
   // Declared here (not inside the try below) so the outer catch can still report
   // a SharePoint/PCO-file failure even if something later in the pipeline throws.
   let sharePointLink = null;
@@ -145,6 +150,8 @@ router.post('/survey', express.json({ limit: '1mb' }), async (req, res) => {
       // Checked by default on the quiz; only written when true so an unchecked
       // submission doesn't overwrite a "Yes" from someone's earlier submission.
       contactMeVolunteering: submission.contactMeVolunteering ? 'Yes' : undefined,
+      // Same only-write-when-true rule as above.
+      pastorRequest: submission.pastorRequest ? 'Yes' : undefined,
       pdfLink: pcoFileId,
     });
     if (missingFields.length > 0) {
